@@ -1,0 +1,11 @@
+# data
+04_DATA/RAW/
+04_DATA/PROCESSED/
+05_ANALYSIS/FIGURES/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.env
+.DS_Store

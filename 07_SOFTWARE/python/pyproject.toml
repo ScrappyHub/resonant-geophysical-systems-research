@@ -1,0 +1,14 @@
+[project]
+name = "ppn"
+version = "0.1.0"
+description = "Planetary Pyramid Network - experiment tooling"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "matplotlib"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
