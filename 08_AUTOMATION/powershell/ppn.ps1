@@ -16,7 +16,7 @@ Commands:
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true, Position=0)]
-  [ValidateSet('init-run','ingest','quicklook','where')]
+  [ValidateSet('init-run','ingest','quicklook','where','resonance')]
   [string]$Command,
 
   [Parameter()][ValidateSet('PHASE1','PHASE2')][string]$Phase,
@@ -227,3 +227,4 @@ switch ($Command) {
   }
 
 }
+
