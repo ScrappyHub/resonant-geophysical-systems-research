@@ -49,7 +49,6 @@ switch ($Command) {
 
   'status' {
     if (-not $ExperimentId) { Die "ExperimentId is required." }
-
     $raw  = Join-Path $project "04_DATA\RAW\$ExperimentId"
     $proc = Join-Path $project "04_DATA\PROCESSED\$ExperimentId"
     $rep  = Join-Path $project "05_ANALYSIS\REPORTS\$ExperimentId"
@@ -177,5 +176,27 @@ switch ($Command) {
     break
   }
 
-}
+  'resonance-summary' {
+    if (-not $ExperimentId) { Die "ExperimentId is required." }
 
+    $dir = Join-Path $project "04_DATA\PROCESSED\$ExperimentId\resonance_engine_v1"
+    $json = Join-Path $dir "resonance_sweep.json"
+    if (-not (Test-Path $json)) { Die "Missing: $json (run: resonance first)" }
+
+    $obj = Get-Content $json -Raw | ConvertFrom-Json
+
+    $csvPath = Join-Path $dir "resonance_sweep.csv"
+    $obj.results | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $csvPath
+
+    $top = $obj.results | Sort-Object em_rms -Descending | Select-Object -First 10
+
+    Write-Host "✅ Resonance summary: $ExperimentId" -ForegroundColor Green
+    Write-Host " - JSON: $json" -ForegroundColor DarkGray
+    Write-Host " - CSV:  $csvPath" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "Top 10 by EM_RMS:" -ForegroundColor Cyan
+    $top | Format-Table drive_hz, em_rms, vib_rms, chamber_rms, peak_em_hz -AutoSize
+    break
+  }
+
+}
