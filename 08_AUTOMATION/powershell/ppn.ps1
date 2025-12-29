@@ -42,6 +42,34 @@ function NextSeq([string]$phaseCode) {
 
 switch ($Command) {
 
+  'resonance-fast' {
+    if (-not $ExperimentId) { Die "ExperimentId is required." }
+
+    $out1 = Join-Path $project "04_DATA\PROCESSED\$ExperimentId\resonance_engine_v1"
+    Ensure-Dir $out1
+
+    $pyRoot = Join-Path $project "07_SOFTWARE\python"
+    $env:PYTHONPATH = Join-Path $pyRoot "src"
+
+    $script = Join-Path $pyRoot "scripts\run_resonance_engine.py"
+    if (-not (Test-Path $script)) { Die "Missing python script: $script" }
+
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+      & py $script --out $out1
+    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+      & python $script --out $out1
+    } else {
+      Die "Python not found (need 'py' launcher or 'python' on PATH)."
+    }
+
+    $json = Join-Path $out1 "resonance_sweep.json"
+    if (-not (Test-Path $json)) { Die "Expected output missing: $json" }
+
+    Write-Host "✅ Resonance FAST complete: $json" -ForegroundColor Green
+    break
+  }
+
+
   'where' {
     Write-Host $project
     break
@@ -239,4 +267,5 @@ switch ($Command) {
   }
 
 }
+
 
