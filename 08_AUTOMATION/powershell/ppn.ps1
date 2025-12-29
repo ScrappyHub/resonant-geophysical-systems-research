@@ -1,4 +1,4 @@
-<#
+﻿<#
 PPN Command Hub
 
 Usage:
@@ -25,8 +25,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$here = Split-Path -Parent $PSScriptRoot
-$project = Split-Path -Parent (Split-Path -Parent $here)
+
+# Robust project-root discovery:
+# Walk upward from this script location until we find README.md at the project root.
+$project = $PSScriptRoot
+while ($true) {
+  if (Test-Path (Join-Path $project "README.md")) { break }
+  $parent = Split-Path -Parent $project
+  if (-not $parent -or $parent -eq $project) { throw "Could not locate project root (README.md not found in parents)." }
+  $project = $parent
+}
 
 function Die($msg) { throw $msg }
 
@@ -126,7 +134,7 @@ switch ($Command) {
 
     if (-not (Test-Path $metaPath)) { Write-Json $metaPath $meta }
 
-    Write-Host "✅ Created Experiment: $ExperimentId" -ForegroundColor Green
+    Write-Host "âœ… Created Experiment: $ExperimentId" -ForegroundColor Green
     Write-Host " - Run sheet: $runSheet" -ForegroundColor DarkGray
     Write-Host " - Metadata:  $metaPath" -ForegroundColor DarkGray
     Write-Host " - RAW dir:   $rawDir" -ForegroundColor DarkGray
@@ -163,7 +171,7 @@ switch ($Command) {
     $manifestPath = Join-Path $metaDir "$ExperimentId.manifest.json"
     $manifest | ConvertTo-Json -Depth 6 | Out-File -FilePath $manifestPath -Encoding utf8
 
-    Write-Host "✅ Ingest complete: $ExperimentId" -ForegroundColor Green
+    Write-Host "âœ… Ingest complete: $ExperimentId" -ForegroundColor Green
     Write-Host " - RAW dir:      $rawDir" -ForegroundColor DarkGray
     Write-Host " - Manifest:     $manifestPath" -ForegroundColor DarkGray
     Write-Host " - Files copied: $($files.Count)" -ForegroundColor DarkGray
@@ -213,7 +221,7 @@ switch ($Command) {
     $mdPath = Join-Path $outDir "quicklook.md"
     $report -join "`n" | Out-File -FilePath $mdPath -Encoding utf8
 
-    Write-Host "✅ Quicklook created: $mdPath" -ForegroundColor Green
+    Write-Host "âœ… Quicklook created: $mdPath" -ForegroundColor Green
     Write-Host "Next: run python analysis once you know sampling rates / column names." -ForegroundColor Yellow
     break
   }
