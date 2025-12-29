@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
   [Parameter(Mandatory=$true, Position=0)]
-  [ValidateSet('where','status','init-run','ingest','quicklook','resonance')]
+  [ValidateSet('where','status','init-run','ingest','quicklook','resonance','resonance-summary')]
   [string]$Command,
 
   [Parameter()][ValidateSet('PHASE1','PHASE2')][string]$Phase,
@@ -178,3 +178,4 @@ switch ($Command) {
   }
 
 }
+
