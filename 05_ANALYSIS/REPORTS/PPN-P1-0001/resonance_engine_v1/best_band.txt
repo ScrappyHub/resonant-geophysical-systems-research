@@ -1,4 +1,0 @@
-peak_drive_hz=32.0
-peak_em_rms=7.8039477265318
-band_lo_hz=30.0
-band_hi_hz=33.0

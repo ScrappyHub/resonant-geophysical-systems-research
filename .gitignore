@@ -1,11 +1,25 @@
-# data
-04_DATA/RAW/
-04_DATA/PROCESSED/
-05_ANALYSIS/FIGURES/
+# =================================================
+# PPN: Ignore generated data + analysis outputs
+# =================================================
+04_DATA/
+05_ANALYSIS/
 
-# python
+# Common experiment outputs
+02_EXPERIMENTS/**/OUTPUTS/
+
+# If you want to KEEP plots/CSVs/JSON in git, delete these 3 lines:
+**/*.png
+**/*.csv
+**/*.json
+
+# Python caches
 __pycache__/
 *.pyc
-.venv/
-.env
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# OS/editor
 .DS_Store
+Thumbs.db
+.vscode/
