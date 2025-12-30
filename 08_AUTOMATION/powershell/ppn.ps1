@@ -1,10 +1,10 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
   [Parameter(Mandatory=$true, Position=0)]
-  [ValidateSet('where','status','init-run','ingest','quicklook','resonance','resonance-summary','resonance-plot','resonance-fast')]
+  [ValidateSet('where','status','init-run','ingest','quicklook','resonance','resonance-summary','resonance-plot','resonance-fast','docs-index','git-hygiene','run-check')]
   [string]$Command,
 
-  [Parameter()][ValidateSet('PHASE1','PHASE2')][string]$Phase,
+  [Parameter()][ValidateSet('PHASE1','PHASE2','docs-index','git-hygiene','run-check')][string]$Phase,
   [Parameter()][string]$ExperimentId,
   [Parameter()][string]$SourceDir
 )
