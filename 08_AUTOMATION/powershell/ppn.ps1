@@ -45,12 +45,11 @@ switch ($Command) {
   'docs-index' {
     $idx = Join-Path $project '01_DOCS\00_OVERVIEW\README_INDEX.md'
     if (-not (Test-Path $idx)) { Die "Missing docs index: $idx" }
-
     Write-Host "✅ Docs index:" -ForegroundColor Green
     Write-Host (" - " + $idx) -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "---- BEGIN README_INDEX.md (first 20 lines) ----" -ForegroundColor Cyan
-    (Get-Content $idx -TotalCount 20) | ForEach-Object { Write-Host [CmdletBinding()]
+    Get-Content -Path $idx -TotalCount 20 | ForEach-Object { Write-Host [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true, Position=0)]
   [ValidateSet('where','status','init-run','ingest','quicklook','resonance','resonance-summary','resonance-plot')]
@@ -295,6 +294,7 @@ switch ($Command) {
     Write-Host "---- END README_INDEX.md ----" -ForegroundColor Cyan
     break
   }
+
   'git-hygiene' {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die "git not found on PATH." }
     Push-Location $project
@@ -319,24 +319,20 @@ switch ($Command) {
     } finally { Pop-Location }
     break
   }
+
   'run-check' {
     if (-not $ExperimentId) { Die "ExperimentId is required." }
-
     $proc = Join-Path $project "04_DATA\PROCESSED\$ExperimentId\resonance_engine_v1"
     $rpt  = Join-Path $project "05_ANALYSIS\REPORTS\$ExperimentId\resonance_engine_v1"
-
     $json = Join-Path $proc "resonance_sweep.json"
     $csv  = Join-Path $proc "resonance_sweep.csv"
     $band = Join-Path $proc "best_band.txt"
-
     Write-Host "RUN CHECK: $ExperimentId" -ForegroundColor Cyan
     Write-Host (" - PROC: " + $proc) -ForegroundColor DarkGray
     Write-Host (" - RPT:  " + $rpt)  -ForegroundColor DarkGray
-
     $need = @($json, $csv, $band)
     $missing = @()
     foreach ($p in $need) { if (-not (Test-Path $p)) { $missing += $p } }
-
     if ($missing.Count -gt 0) {
       Write-Host "❌ Missing expected outputs:" -ForegroundColor Red
       $missing | ForEach-Object { Write-Host (" - " + [CmdletBinding()]
@@ -583,13 +579,11 @@ switch ($Command) {
 ) -ForegroundColor Yellow }
       Die "Run check failed."
     }
-
     Write-Host "✅ Found outputs:" -ForegroundColor Green
     foreach ($p in $need) {
       $fi = Get-Item $p
       Write-Host (" - " + $fi.Name + " (" + [Math]::Round($fi.Length/1KB,2) + " KB)") -ForegroundColor DarkGray
     }
-
     Write-Host "✅ Run check passed: $ExperimentId" -ForegroundColor Green
     break
   }
