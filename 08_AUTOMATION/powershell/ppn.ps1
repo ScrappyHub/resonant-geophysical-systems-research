@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
   [Parameter(Mandatory=$true, Position=0)]
   [ValidateSet('where','status','init-run','ingest','quicklook','resonance','resonance-summary','resonance-plot','docs-index','git-hygiene','run-check')]
@@ -161,7 +161,7 @@ switch ($Command) {
       Write-Json $metaPath $meta
     }
 
-    Write-Host "✅ Created Experiment: $ExperimentId" -ForegroundColor Green
+    Write-Host "âœ… Created Experiment: $ExperimentId" -ForegroundColor Green
     Write-Host " - Run sheet: $runSheet" -ForegroundColor DarkGray
     Write-Host " - Metadata:  $metaPath" -ForegroundColor DarkGray
     Write-Host " - RAW dir:   $rawDir" -ForegroundColor DarkGray
@@ -196,7 +196,7 @@ switch ($Command) {
     $manifestPath = Join-Path $metaDir "$ExperimentId.manifest.json"
     $manifest | ConvertTo-Json -Depth 6 | Out-File -FilePath $manifestPath -Encoding utf8
 
-    Write-Host "✅ Ingest complete: $ExperimentId" -ForegroundColor Green
+    Write-Host "âœ… Ingest complete: $ExperimentId" -ForegroundColor Green
     Write-Host " - RAW dir:      $rawDir" -ForegroundColor DarkGray
     Write-Host " - Manifest:     $manifestPath" -ForegroundColor DarkGray
     break
@@ -210,7 +210,7 @@ switch ($Command) {
     Ensure-Dir $outDir
     $mdPath = Join-Path $outDir "quicklook.md"
     "Quicklook: $ExperimentId`nRAW: $rawDir`nGenerated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File -FilePath $mdPath -Encoding utf8
-    Write-Host "✅ Quicklook created: $mdPath" -ForegroundColor Green
+    Write-Host "âœ… Quicklook created: $mdPath" -ForegroundColor Green
     break
   }
 
@@ -237,7 +237,7 @@ switch ($Command) {
     $json = Join-Path $out1 "resonance_sweep.json"
     if (-not (Test-Path $json)) { Die "Expected output missing: $json" }
 
-    Write-Host "✅ Resonance complete: $json" -ForegroundColor Green
+    Write-Host "âœ… Resonance complete: $json" -ForegroundColor Green
     break
   }
 
@@ -255,7 +255,7 @@ switch ($Command) {
 
     $top = $obj.results | Sort-Object em_rms -Descending | Select-Object -First 10
 
-    Write-Host "✅ Resonance summary: $ExperimentId" -ForegroundColor Green
+    Write-Host "âœ… Resonance summary: $ExperimentId" -ForegroundColor Green
     Write-Host " - JSON: $json" -ForegroundColor DarkGray
     Write-Host " - CSV:  $csvPath" -ForegroundColor DarkGray
     Write-Host ""
@@ -296,7 +296,7 @@ switch ($Command) {
     $band = Join-Path $dir "best_band.txt"
     if (Test-Path $band) { Copy-Item -Path $band -Destination $reportDir -Force }
 
-    Write-Host "✅ Resonance plots complete: $ExperimentId" -ForegroundColor Green
+    Write-Host "âœ… Resonance plots complete: $ExperimentId" -ForegroundColor Green
     Write-Host " - PROC: $dir" -ForegroundColor DarkGray
     Write-Host " - RPT:  $reportDir" -ForegroundColor DarkGray
     break
