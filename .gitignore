@@ -23,3 +23,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 .vscode/
+# --- Local runs / generated outputs (keep out of git) ---
+02_EXPERIMENTS/**/RUNS/
+08_AUTOMATION/powershell/*.bak_*
+08_AUTOMATION/powershell/*.bak_pipeline_*
