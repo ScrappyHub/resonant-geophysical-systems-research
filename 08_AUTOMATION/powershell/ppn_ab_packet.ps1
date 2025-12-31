@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # PPN: CANONICAL A/B PACKET BUILDER (P1 vs any P2)
 #
 # Creates: 05_ANALYSIS\REPORTS\<P2>\_AB_COMPARE\
@@ -268,5 +268,21 @@ Write-Host "`n✅ CANONICAL A/B PACKET READY -> $p2AB" -ForegroundColor Green
 
 
 
+
+
+
+# ---- BundleDir (operator-grade): auto-pick latest P1 export bundle if not provided ----
+$exportsRoot = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}\_EXPORTS" -f $P1)
+if (-not $PSBoundParameters.ContainsKey("BundleDir") -or [string]::IsNullOrWhiteSpace($BundleDir)) {
+  if (-not (Test-Path -LiteralPath $exportsRoot)) { throw ("Missing exports root for P1: " + $exportsRoot) }
+  $candidate = Get-ChildItem -LiteralPath $exportsRoot -Directory |
+    Where-Object { $_.Name -like "resonance_engine_v1_bundle_*" } |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $candidate) { throw ("No export bundles found under: " + $exportsRoot) }
+  $BundleDir = $candidate.FullName
+}
+$bestBandPath = Join-Path $BundleDir "best_band.txt"
+if (-not (Test-Path -LiteralPath $bestBandPath)) { throw ("Missing best_band.txt in bundle: " + $bestBandPath) }
+Write-Host ("[PPN] BundleDir -> " + $BundleDir) -ForegroundColor DarkCyan
 
 
