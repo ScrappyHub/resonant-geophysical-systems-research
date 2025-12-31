@@ -20,43 +20,63 @@ function WriteUtf8([string]$Path, [string]$Content) {
   if (-not (Test-Path -LiteralPath $Path)) { Fail "Failed to write: $Path" }
 }
 
-function InsertAfter([string]$Text, [string]$Needle, [string]$Insert) {
-  $idx = $Text.IndexOf($Needle, [StringComparison]::Ordinal)
-  if ($idx -lt 0) { return $null }
-  $pos = $idx + $Needle.Length
-  return $Text.Substring(0,$pos) + $Insert + $Text.Substring($pos)
-}
-
-function InsertBefore([string]$Text, [string]$Needle, [string]$Insert) {
-  $idx = $Text.IndexOf($Needle, [StringComparison]::Ordinal)
-  if ($idx -lt 0) { return $null }
-  return $Text.Substring(0,$idx) + $Insert + $Text.Substring($idx)
-}
-
-function RemoveLineContaining([string]$Text, [string]$Token) {
+function RemoveLinesLike([string]$Text, [string]$LikePattern) {
   $lines = $Text -split "\r?\n", -1
   $out = New-Object System.Collections.Generic.List[string]
   foreach ($ln in $lines) {
-    if ($ln -like ("*" + $Token + "*")) { continue }
+    if ($ln -like $LikePattern) { continue }
     $out.Add($ln) | Out-Null
   }
   return ($out -join "`r`n")
 }
 
-function TryInsertAtAnyAnchor([string]$Text, [string[]]$Anchors, [string]$Insert, [ref]$UsedAnchor) {
-  foreach ($a in $Anchors) {
-    $tmp = InsertBefore $Text $a $Insert
-    if ($tmp) { $UsedAnchor.Value = $a; return $tmp }
+function InsertBlockAfterFirstMatch([string]$Text, [string]$LikePattern, [string]$Block, [ref]$UsedLabel) {
+  $lines = $Text -split "\r?\n", -1
+  for ($i=0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -like $LikePattern) {
+      $UsedLabel.Value = "after match: $LikePattern (line " + ($i+1) + ")"
+      $head = $lines[0..$i] -join "`r`n"
+      $tail = ""
+      if ($i+1 -le $lines.Count-1) { $tail = ($lines[($i+1)..($lines.Count-1)] -join "`r`n") }
+      if ($tail.Length -gt 0) { return ($head + "`r`n" + $Block + "`r`n" + $tail) }
+      return ($head + "`r`n" + $Block + "`r`n")
+    }
   }
   return $null
 }
 
-function TryInsertAfterAnyAnchor([string]$Text, [string[]]$Anchors, [string]$Insert, [ref]$UsedAnchor) {
-  foreach ($a in $Anchors) {
-    $tmp = InsertAfter $Text $a $Insert
-    if ($tmp) { $UsedAnchor.Value = $a; return $tmp }
+function InsertBlockAfterParamClose([string]$Text, [string]$Block, [ref]$UsedLabel) {
+  # Find first line that is exactly ')' after a 'param(' line (very common structure)
+  $lines = $Text -split "\r?\n", -1
+  $seenParam = $false
+  for ($i=0; $i -lt $lines.Count; $i++) {
+    $ln = $lines[$i].Trim()
+    if (-not $seenParam -and $ln -like "param(*") { $seenParam = $true; continue }
+    if ($seenParam -and $ln -eq ")") {
+      $UsedLabel.Value = "after param() close (line " + ($i+1) + ")"
+      $head = $lines[0..$i] -join "`r`n"
+      $tail = ""
+      if ($i+1 -le $lines.Count-1) { $tail = ($lines[($i+1)..($lines.Count-1)] -join "`r`n") }
+      if ($tail.Length -gt 0) { return ($head + "`r`n" + $Block + "`r`n" + $tail) }
+      return ($head + "`r`n" + $Block + "`r`n")
+    }
   }
   return $null
+}
+
+function PrintDebugCandidates([string]$Text) {
+  Write-Host "`n[PPN] DEBUG CANDIDATE LINES (automatic)" -ForegroundColor Yellow
+  $lines = $Text -split "\r?\n", -1
+  $needles = @("PATHS","SHA","sumFile","_AB_COMPARE","BundleDir","best_band")
+  for ($i=0; $i -lt $lines.Count; $i++) {
+    foreach ($n in $needles) {
+      if ($lines[$i] -like ("*" + $n + "*")) {
+        $msg = ("L{0:0000}: {1}" -f ($i+1), $lines[$i])
+        Write-Host $msg -ForegroundColor DarkYellow
+        break
+      }
+    }
+  }
 }
 
 if (-not (Test-Path -LiteralPath $RepoRoot)) { Fail "Missing RepoRoot: $RepoRoot" }
@@ -71,7 +91,8 @@ if ($raw -notlike ("*" + $marker + "*")) {
   $lines = $raw -split "\r?\n", -1
   for ($i=0; $i -lt $lines.Count; $i++) {
     $ln = $lines[$i]
-    if ($ln -like "*`$BundleDir*" -and $ln -like "*=*" -and $ln -like "*resonance_engine_v1_bundle_*") {
+    # any BundleDir param line that includes an '=' assignment becomes just the left side
+    if ($ln -like "*[string]*`$BundleDir*" -and $ln -like "*=*" ) {
       $eq = $ln.IndexOf("=", [StringComparison]::Ordinal)
       if ($eq -gt 0) { $lines[$i] = $ln.Substring(0, $eq).TrimEnd() }
     }
@@ -79,7 +100,7 @@ if ($raw -notlike ("*" + $marker + "*")) {
   $raw = ($lines -join "`r`n")
 
   # 2) Remove any pre-bundle bestBandPath assignment referencing BundleDir
-  $raw = RemoveLineContaining $raw '$bestBandPath = Join-Path $BundleDir "best_band.txt"'
+  $raw = RemoveLinesLike $raw "*bestBandPath*BundleDir*best_band.txt*"
 
   # 3) Build operator-grade auto-pick bundle block
   $block = @(
@@ -104,32 +125,23 @@ if ($raw -notlike ("*" + $marker + "*")) {
     ""
   ) -join "`r`n"
 
-  # 4) Insert using robust anchor fallback list
+  # 4) Insert block using line-scan anchors (wildcards), then param() close fallback
   $used = ""
-  $primaryAnchors = @(
-    "# ---- SAFETY CHECKS ----",
-    "# ---- SAFETY CHECKS",
-    "# ---- Ensure P2 outputs exist ----",
-    "# ---- Ensure P2 outputs exist",
-    "# ---- PATHS ----",
-    "# ---- PATHS"
-  )
+  $raw2 = $null
 
-  $raw2 = TryInsertAtAnyAnchor $raw $primaryAnchors $block ([ref]$used)
+  $raw2 = InsertBlockAfterFirstMatch $raw "*SHA256SUMS*" $block ([ref]$used)
+  if (-not $raw2) { $raw2 = InsertBlockAfterFirstMatch $raw "*`$sumFile*" $block ([ref]$used) }
+  if (-not $raw2) { $raw2 = InsertBlockAfterFirstMatch $raw "*_AB_COMPARE*" $block ([ref]$used) }
+  if (-not $raw2) { $raw2 = InsertBlockAfterFirstMatch $raw "*# ---- PATHS*" $block ([ref]$used) }
+  if (-not $raw2) { $raw2 = InsertBlockAfterParamClose $raw $block ([ref]$used) }
 
   if (-not $raw2) {
-    # fallback: insert after $sumFile line (stable)
-    $afterAnchors = @(
-      '$sumFile = Join-Path $p2AB "SHA256SUMS.txt"',
-      '$sumFile= Join-Path $p2AB "SHA256SUMS.txt"'
-    )
-    $raw2 = TryInsertAfterAnyAnchor $raw $afterAnchors ($block + "`r`n") ([ref]$used)
+    PrintDebugCandidates $raw
+    Fail "Operator polish: no valid insertion anchor found (SHA256SUMS/sumFile/_AB_COMPARE/PATHS/param-close missing)."
   }
 
-  if (-not $raw2) { Fail "Operator polish: no valid insertion anchor found (SAFETY/PATHS/sumFile missing)." }
-
   $raw = $raw2
-  Write-Host ("[PPN] Inserted operator bundle auto-pick block using anchor: " + $used) -ForegroundColor DarkGreen
+  Write-Host ("[PPN] Inserted operator bundle auto-pick block (" + $used + ")") -ForegroundColor DarkGreen
 }
 
 if ($raw -notlike ("*" + $marker + "*")) { Fail "Operator polish patch failed: marker missing after patch." }
