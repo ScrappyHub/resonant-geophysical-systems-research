@@ -17,10 +17,23 @@ function WriteUtf8([string]$Path, [string]$Content) {
   Set-Content -LiteralPath $Path -Encoding UTF8 -Value $Content
   if (-not (Test-Path -LiteralPath $Path)) { Fail "Failed to write: $Path" }
 }
+function ReplaceAll([string]$Text, [string]$Old, [string]$New) {
+  if ([string]::IsNullOrEmpty($Old)) { Fail "ReplaceAll: Old is empty" }
+  return $Text.Replace($Old, $New)
+}
 function InsertBefore([string]$Text, [string]$Needle, [string]$Insert) {
   $idx = $Text.IndexOf($Needle, [StringComparison]::Ordinal)
   if ($idx -lt 0) { Fail "InsertBefore: anchor not found: $Needle" }
   return $Text.Substring(0,$idx) + $Insert + $Text.Substring($idx)
+}
+function RemoveLineContaining([string]$Text, [string]$Token) {
+  $lines = $Text -split "\r?\n", -1
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($ln in $lines) {
+    if ($ln -like ("*" + $Token + "*")) { continue }
+    $out.Add($ln) | Out-Null
+  }
+  return ($out -join "`r`n")
 }
 
 if (-not (Test-Path -LiteralPath $RepoRoot)) { Fail "Missing RepoRoot: $RepoRoot" }
@@ -28,33 +41,28 @@ if (-not (Test-Path -LiteralPath $RepoRoot)) { Fail "Missing RepoRoot: $RepoRoot
 $packetPath = Join-Path $RepoRoot "08_AUTOMATION\powershell\ppn_ab_packet.ps1"
 $raw = ReadUtf8 $packetPath
 
-# ------------------------------------------------------------
-# OPERATOR POLISH PATCH (idempotent)
-# 1) BundleDir param becomes optional (no timestamp default)
-# 2) Add auto-pick latest valid P1 export bundle (requires best_band.txt)
-# 3) Ensure bestBandPath is derived AFTER bundle selection
-# ------------------------------------------------------------
-
 $marker = "# ---- BundleDir (operator-grade): auto-pick latest P1 export bundle if not provided ----"
-if ($raw -notmatch [regex]::Escape($marker)) {
-  # 1) Replace BundleDir param default -> optional
-  # Handles: [Parameter()][string]$BundleDir = "..."
-  $raw = [regex]::Replace(
-    $raw,
-    "(?m)^\s*\[Parameter\(\)\]\s*\[string\]\s*\`$BundleDir\s*=\s*\"[^\"]*\"\s*$",
-    "  [Parameter()][string]`$BundleDir",
-    1
-  )
+if ($raw -notlike ("*" + $marker + "*")) {
 
-  # 2) Remove any early bestBandPath line that references $BundleDir
-  $raw = [regex]::Replace(
-    $raw,
-    "(?m)^\s*\`$bestBandPath\s*=\s*Join-Path\s+\`$BundleDir\s+\"best_band\.txt\"\s*\r?\n",
-    "",
-    1
-  )
+  # 1) Make BundleDir param optional by line-based rewrite (no regex)
+  # Find the param line that contains $BundleDir = "..." and strip the default assignment.
+  $lines = $raw -split "\r?\n", -1
+  for ($i=0; $i -lt $lines.Count; $i++) {
+    $ln = $lines[$i]
+    if ($ln -like "*`$BundleDir*" -and $ln -like "*=*" -and $ln -like "*resonance_engine_v1_bundle_*") {
+      # Convert e.g.  [Parameter()][string]$BundleDir = "C:\..."  ->  [Parameter()][string]$BundleDir
+      $eq = $ln.IndexOf("=", [StringComparison]::Ordinal)
+      if ($eq -gt 0) {
+        $lines[$i] = $ln.Substring(0, $eq).TrimEnd()
+      }
+    }
+  }
+  $raw = ($lines -join "`r`n")
 
-  # 3) Insert the operator-grade bundle auto-pick block immediately before SAFETY CHECKS anchor
+  # 2) Remove any pre-bundle bestBandPath assignment that references $BundleDir
+  $raw = RemoveLineContaining $raw "`$bestBandPath = Join-Path `$BundleDir `"best_band.txt`""
+
+  # 3) Insert bundle auto-pick block before SAFETY CHECKS anchor
   $anchor = "# ---- SAFETY CHECKS ----"
   $block = @(
     "",
@@ -83,8 +91,7 @@ if ($raw -notmatch [regex]::Escape($marker)) {
   $raw = InsertBefore $raw $anchor $block
 }
 
-# Final sanity: confirm marker exists now
-if ($raw -notmatch [regex]::Escape($marker)) { Fail "Operator polish patch failed: marker missing after patch." }
+if ($raw -notlike ("*" + $marker + "*")) { Fail "Operator polish patch failed: marker missing after patch." }
 
 WriteUtf8 $packetPath $raw
 Write-Host "✓ Patched: 08_AUTOMATION\powershell\ppn_ab_packet.ps1" -ForegroundColor Green
