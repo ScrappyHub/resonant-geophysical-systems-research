@@ -393,3 +393,74 @@ if (-not (Test-Path -LiteralPath $bestBandPath)) { throw ("Missing best_band.txt
 Write-Host ("[PPN] BundleDir -> " + $BundleDir) -ForegroundColor DarkCyan
 
 
+
+# ---- PPN: CANONICAL POINTER OVERWRITE V1 (BEGIN) ----
+try {
+  function Ppn-NormPath([string]$p) {
+    if ([string]::IsNullOrWhiteSpace($p)) { return $p }
+    return [IO.Path]::GetFullPath($p).TrimEnd('\','/')
+  }
+
+  function Ppn-GitHead([string]$RepoRoot) {
+    try {
+      $v = (& git -C $RepoRoot rev-parse HEAD 2>$null)
+      if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
+    } catch {}
+    return "<unknown>"
+  }
+
+  function Ppn-AssertPathHasToken([string]$Label, [string]$Path, [string]$Token) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw ("Missing path for " + $Label) }
+    if ($Path -notlike ("*" + $Token + "*")) {
+      throw ("MIXED-ID FAIL: " + $Label + " path does not contain token [" + $Token + "]. Path=" + $Path)
+    }
+  }
+
+  # Must exist by end-of-script
+  if (-not (Get-Variable -Name p2AB -ErrorAction SilentlyContinue)) { throw "p2AB missing at end-of-script (unexpected)" }
+  if (-not (Get-Variable -Name P1  -ErrorAction SilentlyContinue)) { throw "P1 missing at end-of-script (unexpected)" }
+  if (-not (Get-Variable -Name P2  -ErrorAction SilentlyContinue)) { throw "P2 missing at end-of-script (unexpected)" }
+  if (-not (Get-Variable -Name exportsRoot -ErrorAction SilentlyContinue)) { throw "exportsRoot missing at end-of-script (unexpected)" }
+  if (-not (Get-Variable -Name BundleDir -ErrorAction SilentlyContinue)) { throw "BundleDir missing at end-of-script (unexpected)" }
+  if (-not (Get-Variable -Name bestBandPath -ErrorAction SilentlyContinue)) { throw "bestBandPath missing at end-of-script (unexpected)" }
+
+  $p2Seed     = Join-Path $RepoRoot ("04_DATA\RAW\{0}\PHASE2_SEED_CONFIG.json" -f $P2)
+  $p1Sweep    = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\resonance_sweep.csv" -f $P1)
+  $p2Sweep    = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\resonance_sweep.csv" -f $P2)
+  $p2BestBand = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\best_band.txt" -f $P2)
+
+  # Mixed-ID fail-fast guards
+  Ppn-AssertPathHasToken "exportsRoot"   $exportsRoot   $P1
+  Ppn-AssertPathHasToken "BundleDir"     $BundleDir     $P1
+  Ppn-AssertPathHasToken "bestBandPath"  $bestBandPath  $P1
+  Ppn-AssertPathHasToken "p2AB"          $p2AB          $P2
+  Ppn-AssertPathHasToken "p2Seed"        $p2Seed        $P2
+  Ppn-AssertPathHasToken "p1Sweep"       $p1Sweep       $P1
+  Ppn-AssertPathHasToken "p2Sweep"       $p2Sweep       $P2
+  Ppn-AssertPathHasToken "p2BestBand"    $p2BestBand    $P2
+
+  $gitHead = Ppn-GitHead $RepoRoot
+
+  $ptrPath = Join-Path $p2AB "AB_inputs_pointer.txt"
+  $payload = @(
+    "PPN_CANONICAL_POINTER_V1"
+    ("timestamp_utc=" + [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
+    ("git_head=" + $gitHead)
+    ("P1=" + $P1)
+    ("P2=" + $P2)
+    ("exportsRoot=" + (Ppn-NormPath $exportsRoot))
+    ("BundleDir=" + (Ppn-NormPath $BundleDir))
+    ("bestBandPath_bundle=" + (Ppn-NormPath $bestBandPath))
+    ("p2Seed=" + (Ppn-NormPath $p2Seed))
+    ("p1Sweep=" + (Ppn-NormPath $p1Sweep))
+    ("p2Sweep=" + (Ppn-NormPath $p2Sweep))
+    ("bestBandPath_p2=" + (Ppn-NormPath $p2BestBand))
+  ) -join "`r`n"
+
+  [IO.File]::WriteAllText($ptrPath, $payload + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host ("[PPN] CANONICAL pointer overwrite -> " + $ptrPath) -ForegroundColor DarkGreen
+}
+catch {
+  throw ("PPN canonical pointer overwrite failed: " + $_.Exception.Message)
+}
+# ---- PPN: CANONICAL POINTER OVERWRITE V1 (END) ----
