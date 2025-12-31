@@ -27,3 +27,7 @@ Thumbs.db
 02_EXPERIMENTS/**/RUNS/
 08_AUTOMATION/powershell/*.bak_*
 08_AUTOMATION/powershell/*.bak_pipeline_*
+
+# Local bootstrap markers
+07_SOFTWARE/python/.ppn_bootstrap_ok
+
