@@ -1,3 +1,4 @@
+# ---- PPN: LEGACY POINTER WRITER DISABLED (BEGIN) ----
 # ============================================================
 # PPN: CANONICAL A/B PACKET BUILDER (P1 vs any P2)
 #
@@ -13,24 +14,24 @@
 #   & "M:\Plantery Pyramid Network\08_AUTOMATION\powershell\ppn_ab_packet.ps1" -P2 "PPN-P2-0002"
 # ============================================================
 
-[CmdletBinding()]
-param(
-  [Parameter()][string]$RepoRoot  = "M:\Plantery Pyramid Network",
-  [Parameter()][string]$P1        = "PPN-P1-0003",
-  [Parameter(Mandatory=$true)][string]$P2,
-  [Parameter()][string]$BundleDir
-)
+# [CmdletBinding()]
+# param(
+#   [Parameter()][string]$RepoRoot  = "M:\Plantery Pyramid Network",
+#   [Parameter()][string]$P1        = "PPN-P1-0003",
+#   [Parameter(Mandatory=$true)][string]$P2,
+#   [Parameter()][string]$BundleDir
+# )
 # ---- PPN: CANONICAL POINTER WRITE (BEGIN) ----
 # If p2AB exists now, write the deterministic pointer file.
-if (Get-Variable -Name p2AB -Scope Local -ErrorAction SilentlyContinue) {
-  try {
-    $ptr = Join-Path $p2AB "AB_inputs_pointer.txt"
-    if (-not $script:PPN_POINTER_PAYLOAD) { throw "PPN_POINTER_PAYLOAD missing (unexpected)" }
-    [IO.File]::WriteAllText($ptr, $script:PPN_POINTER_PAYLOAD + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
-  } catch {
-    throw ("Failed writing AB_inputs_pointer.txt: " + $_.Exception.Message)
-  }
-}
+# if (Get-Variable -Name p2AB -Scope Local -ErrorAction SilentlyContinue) {
+#   try {
+#     $ptr = Join-Path $p2AB "AB_inputs_pointer.txt"
+#     if (-not $script:PPN_POINTER_PAYLOAD) { throw "PPN_POINTER_PAYLOAD missing (unexpected)" }
+#     [IO.File]::WriteAllText($ptr, $script:PPN_POINTER_PAYLOAD + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
+#   } catch {
+#     throw ("Failed writing AB_inputs_pointer.txt: " + $_.Exception.Message)
+#   }
+# }
 # ---- PPN: CANONICAL POINTER WRITE (END) ----
 # ---- PPN: CANONICAL BUNDLE SELECTION + POINTER (BEGIN) ----
 # BundleDir is OPTIONAL:
@@ -39,52 +40,53 @@ if (Get-Variable -Name p2AB -Scope Local -ErrorAction SilentlyContinue) {
 #
 # Also writes deterministic AB_inputs_pointer.txt (P1,P2,BundleDir,bestBandPath,git hash).
 
-function Ppn-NormPath([string]$p) {
-  if ([string]::IsNullOrWhiteSpace($p)) { return $p }
-  return [IO.Path]::GetFullPath($p).TrimEnd('\','/')
-}
+# function Ppn-NormPath([string]$p) {
+#   if ([string]::IsNullOrWhiteSpace($p)) { return $p }
+#   return [IO.Path]::GetFullPath($p).TrimEnd('\','/')
+# }
 
-function Ppn-GetGitHead([string]$RepoRoot) {
-  try {
-    $v = (& git -C $RepoRoot rev-parse HEAD 2>$null)
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
-  } catch {}
-  return "<unknown>"
-}
+# function Ppn-GetGitHead([string]$RepoRoot) {
+#   try {
+#     $v = (& git -C $RepoRoot rev-parse HEAD 2>$null)
+#     if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
+#   } catch {}
+#   return "<unknown>"
+# }
 
-function Ppn-SelectLatestValidBundle([string]$ExportsRoot) {
-  if (-not (Test-Path -LiteralPath $ExportsRoot)) {
-    throw ("Missing exports root for P1: " + $ExportsRoot)
-  }
+# function Ppn-SelectLatestValidBundle([string]$ExportsRoot) {
+#   if (-not (Test-Path -LiteralPath $ExportsRoot)) {
+#     throw ("Missing exports root for P1: " + $ExportsRoot)
+#   }
 
-  $candidates =
-    Get-ChildItem -LiteralPath $ExportsRoot -Directory -ErrorAction Stop |
-      Where-Object { $_.Name -like "resonance_engine_v1_bundle_*" } |
-      ForEach-Object {
-        $bb = Join-Path $_.FullName "best_band.txt"
-        if (Test-Path -LiteralPath $bb) {
-          [PSCustomObject]@{ Dir = $_.FullName; BestBand = $bb; T = $_.LastWriteTimeUtc }
-        }
-      } |
-      Sort-Object T -Descending
+#   $candidates =
+#     Get-ChildItem -LiteralPath $ExportsRoot -Directory -ErrorAction Stop |
+#       Where-Object { $_.Name -like "resonance_engine_v1_bundle_*" } |
+#       ForEach-Object {
+#         $bb = Join-Path $_.FullName "best_band.txt"
+#         if (Test-Path -LiteralPath $bb) {
+#           [PSCustomObject]@{ Dir = $_.FullName; BestBand = $bb; T = $_.LastWriteTimeUtc }
+#         }
+#       } |
+#       Sort-Object T -Descending
 
-  if (-not $candidates -or $candidates.Count -eq 0) {
-    throw ("No VALID export bundles found (missing best_band.txt) under: " + $ExportsRoot)
-  }
+#   if (-not $candidates -or $candidates.Count -eq 0) {
+#     throw ("No VALID export bundles found (missing best_band.txt) under: " + $ExportsRoot)
+#   }
 
-  return $candidates[0]
-}
+#   return $candidates[0]
+# }
 
 # --- Canonical P1 exports root ---
-$exportsRoot = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}\_EXPORTS" -f $P1)
+# $exportsRoot = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}\_EXPORTS" -f $P1)
 
 # --- Resolve BundleDir ---
-if (-not $PSBoundParameters.ContainsKey("BundleDir") -or [string]::IsNullOrWhiteSpace($BundleDir)) {
-  $pick = Ppn-SelectLatestValidBundle $exportsRoot
-  $BundleDir = $pick.Dir
-  $bestBandPath = $pick.BestBand
-} else {
-  if (-not (Test-Path -LiteralPath $BundleDir)) { throw ("Missing BundleDir: " + $BundleDir) }
+# if (-not $PSBoundParameters.ContainsKey("BundleDir") -or [string]::IsNullOrWhiteSpace($BundleDir)) {
+#   $pick = Ppn-SelectLatestValidBundle $exportsRoot
+#   $BundleDir = $pick.Dir
+#   $bestBandPath = $pick.BestBand
+# } else {
+#   if (-not (Test-Path -LiteralPath $BundleDir)) { throw ("Missing BundleDir: " + $BundleDir) }
+# ---- PPN: LEGACY POINTER WRITER DISABLED (END) ----
 
   # FAIL-FAST: BundleDir must be inside P1 exports root (prevents mixed P1/P2)
   $bdNorm = Ppn-NormPath $BundleDir
@@ -257,7 +259,72 @@ else:
     lines.append("No em_rms_delta column found (check sweep columns).")
 
 out_band.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
-print("WROTE", out_csv)
+print("WROTE
+# ---- PPN: CANONICAL POINTER WRITE V1 (BEGIN) ----
+function Ppn-NormPath([string]$p) {
+  if ([string]::IsNullOrWhiteSpace($p)) { return $p }
+  return [IO.Path]::GetFullPath($p).TrimEnd('\','/')
+}
+
+function Ppn-GitHead([string]$RepoRoot) {
+  try {
+    $v = (& git -C $RepoRoot rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
+  } catch {}
+  return "<unknown>"
+}
+
+function Ppn-AssertPathHasToken([string]$Label, [string]$Path, [string]$Token) {
+  if ([string]::IsNullOrWhiteSpace($Path)) { throw ("Missing path for " + $Label) }
+  if ($Path -notlike ("*" + $Token + "*")) {
+    throw ("MIXED-ID FAIL: " + $Label + " path does not contain token [" + $Token + "]. Path=" + $Path)
+  }
+}
+
+# Canonical expected paths (must already be defined by the script by the time we write):
+#   $p2AB, $P1, $P2, $RepoRoot, $exportsRoot, $BundleDir, $bestBandPath
+if (-not (Get-Variable -Name p2AB -ErrorAction SilentlyContinue)) { throw "p2AB not defined when writing canonical pointer (script ordering bug)" }
+if (-not (Get-Variable -Name P1  -ErrorAction SilentlyContinue)) { throw "P1 not defined when writing canonical pointer" }
+if (-not (Get-Variable -Name P2  -ErrorAction SilentlyContinue)) { throw "P2 not defined when writing canonical pointer" }
+
+# Derive additional artifacts (match your existing pointer content)
+$p2Seed = Join-Path $RepoRoot ("04_DATA\RAW\{0}\PHASE2_SEED_CONFIG.json" -f $P2)
+$p1Sweep = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\resonance_sweep.csv" -f $P1)
+$p2Sweep = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\resonance_sweep.csv" -f $P2)
+$p2BestBand = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\best_band.txt" -f $P2)
+
+# Mixed-ID fail-fast guards
+Ppn-AssertPathHasToken "exportsRoot"   $exportsRoot   $P1
+Ppn-AssertPathHasToken "BundleDir"     $BundleDir     $P1
+Ppn-AssertPathHasToken "bestBandPath"  $bestBandPath  $P1
+Ppn-AssertPathHasToken "p2AB"          $p2AB          $P2
+Ppn-AssertPathHasToken "p2Seed"        $p2Seed        $P2
+Ppn-AssertPathHasToken "p1Sweep"       $p1Sweep       $P1
+Ppn-AssertPathHasToken "p2Sweep"       $p2Sweep       $P2
+Ppn-AssertPathHasToken "p2BestBand"    $p2BestBand    $P2
+
+$gitHead = Ppn-GitHead $RepoRoot
+
+$ptrPath = Join-Path $p2AB "AB_inputs_pointer.txt"
+$payload = @(
+  "PPN_CANONICAL_POINTER_V1"
+  ("timestamp_utc=" + [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
+  ("git_head=" + $gitHead)
+  ("P1=" + $P1)
+  ("P2=" + $P2)
+  ("exportsRoot=" + (Ppn-NormPath $exportsRoot))
+  ("BundleDir=" + (Ppn-NormPath $BundleDir))
+  ("bestBandPath_bundle=" + (Ppn-NormPath $bestBandPath))
+  ("p2Seed=" + (Ppn-NormPath $p2Seed))
+  ("p1Sweep=" + (Ppn-NormPath $p1Sweep))
+  ("p2Sweep=" + (Ppn-NormPath $p2Sweep))
+  ("bestBandPath_p2=" + (Ppn-NormPath $p2BestBand))
+) -join "`r`n"
+
+[IO.File]::WriteAllText($ptrPath, $payload + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
+Write-Host ("[PPN] WROTE canonical pointer -> " + $ptrPath) -ForegroundColor DarkGreen
+# ---- PPN: CANONICAL POINTER WRITE V1 (END) ----
+", out_csv)
 print("WROTE", out_band)
 "@ | Set-Content -Encoding UTF8 -LiteralPath $tmpPy
 
