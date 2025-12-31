@@ -18,3 +18,16 @@ using falsifiable experiments (Phase 1 / Phase 2), sensors, signal processing, a
 2) Every experiment has: plan → instrumentation → run → analysis → report.
 3) Raw data is immutable (never overwrite RAW).
 4) Reports reference exact dataset + commit hash (if using git).
+
+<!-- PPN_OPERATOR_DOCS_START -->
+## Operator Docs (PPN)
+Entry point: 09_DOCS\CANONICAL\MASTER_INDEX.md
+- Master Index: 09_DOCS\CANONICAL\MASTER_INDEX.md
+- Commands: 09_DOCS\CANONICAL\CANONICAL_COMMANDS.md
+- Playbook: 09_DOCS\CANONICAL\TESTING_PLAYBOOK.md
+- Data Flows: 09_DOCS\CANONICAL\DATA_FLOWS.md
+- Anomalies: 09_DOCS\CANONICAL\ANOMALY_CATALOG.md
+- Glossary: 09_DOCS\CANONICAL\GLOSSARY.md
+<!-- PPN_OPERATOR_DOCS_END -->
+
+
