@@ -1,400 +1,180 @@
-# ============================================================
-# PPN: CANONICAL A/B PACKET BUILDER (P1 vs any P2)
-#
-# Creates: 05_ANALYSIS\REPORTS\<P2>\_AB_COMPARE\
-#   - AB_compare_P1_vs_P2.csv
-#   - AB_in_band_summary.txt
-#   - AB_inputs_pointer.txt
-#   - delta_* plots
-#   - README_HANDOFF.md
-#   - SHA256SUMS.txt (+ verification output)
-#
-# Usage:
-#   & "M:\Plantery Pyramid Network\08_AUTOMATION\powershell\ppn_ab_packet.ps1" -P2 "PPN-P2-0002"
-# ============================================================
-
-[CmdletBinding()]
 param(
-  [Parameter()][string]$RepoRoot  = "M:\Plantery Pyramid Network",
-  [Parameter()][string]$P1        = "PPN-P1-0003",
-  [Parameter(Mandatory=$true)][string]$P2,
-  [Parameter()][string]$BundleDir
+  [string]$RepoRoot = "M:\Plantery Pyramid Network",
+  [switch]$EnableRunnerTempCleanup
 )
-# ---- PPN: CANONICAL POINTER WRITE (BEGIN) ----
-# If p2AB exists now, write the deterministic pointer file.
-if (Get-Variable -Name p2AB -Scope Local -ErrorAction SilentlyContinue) {
-  try {
-    $ptr = Join-Path $p2AB "AB_inputs_pointer.txt"
-    if (-not $script:PPN_POINTER_PAYLOAD) { throw "PPN_POINTER_PAYLOAD missing (unexpected)" }
-    [IO.File]::WriteAllText($ptr, $script:PPN_POINTER_PAYLOAD + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
-  } catch {
-    throw ("Failed writing AB_inputs_pointer.txt: " + $_.Exception.Message)
-  }
-}
-# ---- PPN: CANONICAL POINTER WRITE (END) ----
-# ---- PPN: CANONICAL BUNDLE SELECTION + POINTER (BEGIN) ----
-# BundleDir is OPTIONAL:
-# - If not provided, auto-pick the latest P1 export bundle that CONTAINS best_band.txt.
-# - If provided, enforce that it is inside the P1 exports root and contains best_band.txt.
-#
-# Also writes deterministic AB_inputs_pointer.txt (P1,P2,BundleDir,bestBandPath,git hash).
-
-function Ppn-NormPath([string]$p) {
-  if ([string]::IsNullOrWhiteSpace($p)) { return $p }
-  return [IO.Path]::GetFullPath($p).TrimEnd('\','/')
-}
-
-function Ppn-GetGitHead([string]$RepoRoot) {
-  try {
-    $v = (& git -C $RepoRoot rev-parse HEAD 2>$null)
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
-  } catch {}
-  return "<unknown>"
-}
-
-function Ppn-SelectLatestValidBundle([string]$ExportsRoot) {
-  if (-not (Test-Path -LiteralPath $ExportsRoot)) {
-    throw ("Missing exports root for P1: " + $ExportsRoot)
-  }
-
-  $candidates =
-    Get-ChildItem -LiteralPath $ExportsRoot -Directory -ErrorAction Stop |
-      Where-Object { $_.Name -like "resonance_engine_v1_bundle_*" } |
-      ForEach-Object {
-        $bb = Join-Path $_.FullName "best_band.txt"
-        if (Test-Path -LiteralPath $bb) {
-          [PSCustomObject]@{ Dir = $_.FullName; BestBand = $bb; T = $_.LastWriteTimeUtc }
-        }
-      } |
-      Sort-Object T -Descending
-
-  if (-not $candidates -or $candidates.Count -eq 0) {
-    throw ("No VALID export bundles found (missing best_band.txt) under: " + $ExportsRoot)
-  }
-
-  return $candidates[0]
-}
-
-# --- Canonical P1 exports root ---
-$exportsRoot = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}\_EXPORTS" -f $P1)
-
-# --- Resolve BundleDir ---
-if (-not $PSBoundParameters.ContainsKey("BundleDir") -or [string]::IsNullOrWhiteSpace($BundleDir)) {
-  $pick = Ppn-SelectLatestValidBundle $exportsRoot
-  $BundleDir = $pick.Dir
-  $bestBandPath = $pick.BestBand
-} else {
-  if (-not (Test-Path -LiteralPath $BundleDir)) { throw ("Missing BundleDir: " + $BundleDir) }
-
-  # FAIL-FAST: BundleDir must be inside P1 exports root (prevents mixed P1/P2)
-  $bdNorm = Ppn-NormPath $BundleDir
-  $erNorm = Ppn-NormPath $exportsRoot
-  if (-not $bdNorm.StartsWith($erNorm, [StringComparison]::OrdinalIgnoreCase)) {
-    throw ("BundleDir is OUTSIDE expected P1 exports root (mixed IDs?). BundleDir=" + $bdNorm + " ; exportsRoot=" + $erNorm)
-  }
-
-  $bestBandPath = Join-Path $BundleDir "best_band.txt"
-  if (-not (Test-Path -LiteralPath $bestBandPath)) {
-    throw ("Missing best_band.txt in provided bundle: " + $bestBandPath)
-  }
-}
-
-# Extra FAIL-FAST: exports root must exist and contain P1 token in path
-if (-not (Test-Path -LiteralPath $exportsRoot)) { throw ("Missing exports root for P1: " + $exportsRoot) }
-if ($exportsRoot -notlike ("*" + $P1 + "*")) { throw ("Sanity fail: exportsRoot does not contain P1 token. exportsRoot=" + $exportsRoot) }
-
-Write-Host ("[PPN] BundleDir -> " + $BundleDir) -ForegroundColor DarkCyan
-Write-Host ("[PPN] bestBandPath -> " + $bestBandPath) -ForegroundColor DarkCyan
-
-# --- Deterministic pointer artifact (overwrite, canonical) ---
-try {
-  # p2AB is expected later in the script; but if it already exists here, we can write early.
-  # If not, we defer by writing to a temp var and letting the later section use it.
-  $script:PPN_POINTER_PAYLOAD = $null
-
-  $gitHead = Ppn-GetGitHead $RepoRoot
-  $payload = @(
-    "PPN_CANONICAL_POINTER_V1"
-    ("timestamp_utc=" + [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
-    ("git_head=" + $gitHead)
-    ("P1=" + $P1)
-    ("P2=" + $P2)
-    ("exportsRoot=" + (Ppn-NormPath $exportsRoot))
-    ("BundleDir=" + (Ppn-NormPath $BundleDir))
-    ("bestBandPath=" + (Ppn-NormPath $bestBandPath))
-  ) -join "`r`n"
-
-  $script:PPN_POINTER_PAYLOAD = $payload
-} catch {
-  throw ("Failed to build AB_inputs_pointer payload: " + $_.Exception.Message)
-}
-# ---- PPN: CANONICAL BUNDLE SELECTION + POINTER (END) ----
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Write-Host "`n[PPN] A/B packet builder: P1=$P1  P2=$P2" -ForegroundColor Cyan
+$DocsRoot   = Join-Path $RepoRoot "09_DOCS\CANONICAL"
+$ReadmePath = Join-Path $RepoRoot "README.md"
+$RunnerPath = Join-Path $RepoRoot "08_AUTOMATION\powershell\ppn_ab_one_shot.ps1"
 
-$ppnPath = Join-Path $RepoRoot "08_AUTOMATION\powershell\ppn.ps1"
+if (-not (Test-Path -LiteralPath $RepoRoot)) { throw "Missing RepoRoot: $RepoRoot" }
+New-Item -ItemType Directory -Force -Path $DocsRoot | Out-Null
 
-# ---- PATHS ----
-$p1Proc = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1" -f $P1)
-$p2Proc = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1" -f $P2)
-$p2Raw  = Join-Path $RepoRoot ("04_DATA\RAW\{0}" -f $P2)
-
-$seedCfg      = Join-Path $p2Raw "PHASE2_SEED_CONFIG.json"
-
-$p2RptRoot = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}" -f $P2)
-$p2AB      = Join-Path $p2RptRoot "_AB_COMPARE"
-
-$abCsv   = Join-Path $p2AB "AB_compare_P1_vs_P2.csv"
-$abBand  = Join-Path $p2AB "AB_in_band_summary.txt"
-$abMeta  = Join-Path $p2AB "AB_inputs_pointer.txt"
-$readme  = Join-Path $p2AB "README_HANDOFF.md"
-$sumFile = Join-Path $p2AB "SHA256SUMS.txt"
-
-# ---- SAFETY CHECKS ----
-foreach ($p in @($RepoRoot, $ppnPath, $p1Proc, $p2Raw, $BundleDir, $bestBandPath)) {
-  if (-not (Test-Path -LiteralPath $p)) { throw "Missing required path: $p" }
-}
-# ---- Guard: if P2 RAW missing, stop early (prevents batch poison) ----
-if (-not (Test-Path -LiteralPath $p2Raw)) {
-  Write-Host "[PPN] SKIP: Missing P2 RAW folder -> $p2Raw" -ForegroundColor Yellow
-  return
+function Write-FileUtf8([string]$Path, [string]$Content) {
+  $dir = Split-Path -Parent $Path
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  Set-Content -LiteralPath $Path -Encoding UTF8 -Value $Content
+  if (-not (Test-Path -LiteralPath $Path)) { throw "Failed to write: $Path" }
 }
 
-# ---- Ensure P2 outputs exist ----
-$csvP2  = Join-Path $p2Proc "resonance_sweep.csv"
-$bestP2 = Join-Path $p2Proc "best_band.txt"
+# ----------------------------
+# DOC CONTENT (no here-strings)
+# ----------------------------
+$masterIndex = @(
+  "# PPN Master Index (Operator Entry Point)",
+  "",
+  "Operator-grade docs so another engineer can run, verify, and extend PPN without touching canonical 1-10 files.",
+  "",
+  "## Quick Start",
+  "- One-Shot A/B Builder:",
+  "  - pwsh -NoProfile -ExecutionPolicy Bypass -File ""08_AUTOMATION\powershell\ppn_ab_one_shot.ps1""",
+  "  - pwsh -NoProfile -ExecutionPolicy Bypass -File ""08_AUTOMATION\powershell\ppn_ab_one_shot.ps1"" -Only ""PPN-P2-0002"",""PPN-P2-0001""",
+  "",
+  "## Documents",
+  "- CANONICAL_COMMANDS.md",
+  "- TESTING_PLAYBOOK.md",
+  "- DATA_FLOWS.md",
+  "- ANOMALY_CATALOG.md",
+  "- GLOSSARY.md",
+  "",
+  "## Repo Structure (high level)",
+  "- 04_DATA\RAW\PPN-P2-****  (existence gate)",
+  "- 04_DATA\PROCESSED\PPN-*\resonance_engine_v1\resonance_sweep.csv",
+  "- 05_ANALYSIS\REPORTS\PPN-P2-****\_AB_COMPARE\",
+  "- 08_AUTOMATION\powershell\"
+) -join "`r`n"
 
-if (-not (Test-Path -LiteralPath $csvP2)) {
-  Write-Host "[PPN] P2 missing resonance_sweep.csv -> running resonance-summary..." -ForegroundColor Yellow
-  & $ppnPath resonance-summary -ExperimentId $P2
+$commands = @(
+  "# Canonical Commands (PPN)",
+  "",
+  "## A/B Packet Builder (single P2)",
+  "pwsh -NoProfile -ExecutionPolicy Bypass -File ""08_AUTOMATION\powershell\ppn_ab_packet.ps1"" -P2 ""PPN-P2-0002""",
+  "",
+  "## One-Shot (auto-discover all P2 RAW)",
+  "pwsh -NoProfile -ExecutionPolicy Bypass -File ""08_AUTOMATION\powershell\ppn_ab_one_shot.ps1""",
+  "",
+  "## One-Shot (Only list)",
+  "pwsh -NoProfile -ExecutionPolicy Bypass -File ""08_AUTOMATION\powershell\ppn_ab_one_shot.ps1"" -Only ""PPN-P2-0002"",""PPN-P2-0001""",
+  "",
+  "## Golden rules",
+  "- RAW presence is the existence gate.",
+  "- Do not hand-edit generated packets; regenerate."
+) -join "`r`n"
+
+$flows = @(
+  "# Data Flows (PPN)",
+  "",
+  "1) RAW:       04_DATA\RAW\PPN-P2-****",
+  "2) PROCESSED: 04_DATA\PROCESSED\PPN-*\resonance_engine_v1\resonance_sweep.csv",
+  "3) REPORTS:   05_ANALYSIS\REPORTS\PPN-P2-****\_AB_COMPARE\"
+) -join "`r`n"
+
+$anomaly = @(
+  "# Anomaly Catalog (PPN)",
+  "",
+  "## Missing output",
+  "- Likely: RAW/PROCESSED missing, bad path, upstream script failure.",
+  "- Check: existence gate, processed sweep path, python/tool exit codes.",
+  "",
+  "## Flat deltas",
+  "- Likely: comparing same dataset, join mismatch, constant columns.",
+  "- Check: AB_inputs_pointer.txt, sweep row counts, drive_hz overlap.",
+  "",
+  "## In-band empty",
+  "- Likely: band limits do not overlap drive_hz, filter window wrong.",
+  "- Check: configured band vs drive_hz min/max."
+) -join "`r`n"
+
+$glossary = @(
+  "# Glossary (PPN)",
+  "- P1: baseline",
+  "- P2: candidate",
+  "- A/B packet: _AB_COMPARE bundle",
+  "- drive_hz: sweep axis",
+  "- delta: P2 - P1"
+) -join "`r`n"
+
+$playbook = @(
+  "# Testing Playbook (PPN)",
+  "",
+  "Operator interpretation layer: what to look for, how to classify, and what results mean.",
+  "",
+  "## What to look for",
+  "- Broadband shifts (system-wide)",
+  "- Narrowband spikes (resonance behavior)",
+  "- In-band mean/min/max changes (windowed effect)",
+  "",
+  "## What counts as real",
+  "1) Repeatable",
+  "2) Cross-metric confirmation",
+  "3) Physically meaningful clustering (not single-point noise)"
+) -join "`r`n"
+
+Write-FileUtf8 (Join-Path $DocsRoot "MASTER_INDEX.md") $masterIndex
+Write-FileUtf8 (Join-Path $DocsRoot "CANONICAL_COMMANDS.md") $commands
+Write-FileUtf8 (Join-Path $DocsRoot "DATA_FLOWS.md") $flows
+Write-FileUtf8 (Join-Path $DocsRoot "ANOMALY_CATALOG.md") $anomaly
+Write-FileUtf8 (Join-Path $DocsRoot "GLOSSARY.md") $glossary
+Write-FileUtf8 (Join-Path $DocsRoot "TESTING_PLAYBOOK.md") $playbook
+
+# ----------------------------
+# README SECTION (managed)
+# ----------------------------
+$sectionStart = "<!-- PPN_OPERATOR_DOCS_START -->"
+$sectionEnd   = "<!-- PPN_OPERATOR_DOCS_END -->"
+$readmeSection = @(
+  $sectionStart,
+  "## Operator Docs (PPN)",
+  "Entry point: 09_DOCS\CANONICAL\MASTER_INDEX.md",
+  "- Master Index: 09_DOCS\CANONICAL\MASTER_INDEX.md",
+  "- Commands: 09_DOCS\CANONICAL\CANONICAL_COMMANDS.md",
+  "- Playbook: 09_DOCS\CANONICAL\TESTING_PLAYBOOK.md",
+  "- Data Flows: 09_DOCS\CANONICAL\DATA_FLOWS.md",
+  "- Anomalies: 09_DOCS\CANONICAL\ANOMALY_CATALOG.md",
+  "- Glossary: 09_DOCS\CANONICAL\GLOSSARY.md",
+  $sectionEnd
+) -join "`r`n"
+
+if (Test-Path -LiteralPath $ReadmePath) { $r = Get-Content -LiteralPath $ReadmePath -Raw -Encoding UTF8 } else { $r = "# Plantery Pyramid Network`r`n" }
+if ($r -match [regex]::Escape($sectionStart) -and $r -match [regex]::Escape($sectionEnd)) {
+  $pattern = [regex]::Escape($sectionStart) + ".*?" + [regex]::Escape($sectionEnd)
+  $r = [regex]::Replace($r, $pattern, $readmeSection, 1, [Text.RegularExpressions.RegexOptions]::Singleline)
+} else {
+  $r = $r.TrimEnd() + "`r`n`r`n" + $readmeSection + "`r`n"
 }
-if (-not (Test-Path -LiteralPath $bestP2)) {
-  Write-Host "[PPN] P2 missing best_band.txt -> running resonance-plot..." -ForegroundColor Yellow
-  & $ppnPath resonance-plot -ExperimentId $P2
+Write-FileUtf8 $ReadmePath $r
+
+# ----------------------------
+# Optional TEMP cleanup patch (no $_ expansion)
+# ----------------------------
+if ($EnableRunnerTempCleanup) {
+  if (-not (Test-Path -LiteralPath $RunnerPath)) { throw "Runner missing: $RunnerPath" }
+  $rr = Get-Content -LiteralPath $RunnerPath -Raw -Encoding UTF8
+  if ($rr -notmatch "PPN TEMP CLEANUP") {
+    $cleanup = @(
+      ""
+      "# ----- PPN TEMP CLEANUP (canonical) -----"
+      "try {"
+      "  Get-ChildItem -LiteralPath `$env:TEMP -Filter ""ppn_ab_compare_*.py"" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue"
+      "  Get-ChildItem -LiteralPath `$env:TEMP -Filter ""ppn_ab_plots_*.py""   -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue"
+      "  Write-Host ""✓ PPN TEMP CLEANUP: removed temp python files"" -ForegroundColor DarkGreen"
+      "} catch {"
+      "  Write-Host ""ℹ PPN TEMP CLEANUP skipped (non-fatal): `$(`$_.Exception.Message)"" -ForegroundColor DarkGray"
+      "}"
+    ) -join "`r`n"
+    $rr = $rr.TrimEnd() + "`r`n" + $cleanup + "`r`n"
+    Set-Content -LiteralPath $RunnerPath -Encoding UTF8 -Value $rr
+  }
 }
-if (-not (Test-Path -LiteralPath $csvP2))  { throw "Still missing P2 CSV: $csvP2" }
-if (-not (Test-Path -LiteralPath $bestP2)) { throw "Still missing P2 best_band: $bestP2" }
 
-# ---- Create output dir ----
-New-Item -ItemType Directory -Force -Path $p2AB | Out-Null
+Write-Host "`r`n================ DOCS WRITE SUMMARY ================" -ForegroundColor Green
+Get-ChildItem -LiteralPath $DocsRoot -File | Select-Object Name, Length, FullName | Format-Table -AutoSize
+Write-Host "`r`n✅ PPN DOCS ONE-SHOT COMPLETE" -ForegroundColor Green
 
-# ---- Write AB pointer/meta ----
-@"
-P1: $P1
-P2: $P2
-Phase1 bundle: $BundleDir
-P2 seed: $seedCfg
-P1 sweep: $(Join-Path $p1Proc "resonance_sweep.csv")
-P2 sweep: $(Join-Path $p2Proc "resonance_sweep.csv")
-best_band.txt (bundle): $bestBandPath
-best_band.txt (p2):     $bestP2
-"@ | Set-Content -Encoding UTF8 -LiteralPath $abMeta
-
-# ---- Generate AB CSV + in-band summary ----
-$tmpPy = Join-Path $env:TEMP ("ppn_ab_compare_{0}.py" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
-@"
-import re
-import pandas as pd
-from pathlib import Path
-
-P1 = r"$P1"
-P2 = r"$P2"
-
-p1 = Path(r"$p1Proc") / "resonance_sweep.csv"
-p2 = Path(r"$p2Proc") / "resonance_sweep.csv"
-best = Path(r"$bestBandPath")
-
-out_csv  = Path(r"$abCsv")
-out_band = Path(r"$abBand")
-
-def parse_best_band(path: Path):
-    txt = path.read_text(encoding="utf-8", errors="replace").replace("\ufeff","")
-    kv = {}
-    for line in txt.splitlines():
-        m = re.match(r"^\s*([^=]+)\s*=\s*(.+)\s*$", line)
-        if m:
-            kv[m.group(1).strip()] = float(m.group(2).strip())
-    return kv
-
-bb = parse_best_band(best)
-band_lo = bb.get("band_lo_hz")
-band_hi = bb.get("band_hi_hz")
-peak_hz = bb.get("peak_drive_hz")
-
-df1 = pd.read_csv(p1)
-df2 = pd.read_csv(p2)
-
-df1.columns = [c.strip().lower() for c in df1.columns]
-df2.columns = [c.strip().lower() for c in df2.columns]
-
-key = "drive_hz"
-if key not in df1.columns or key not in df2.columns:
-    raise SystemExit("Missing drive_hz column in one of the sweeps")
-
-m = df1.merge(df2, on=key, how="outer", suffixes=("_p1","_p2")).sort_values(key)
-for metric in ("em_rms","vib_rms","chamber_rms","peak_em_hz"):
-    a = f"{metric}_p1"
-    b = f"{metric}_p2"
-    if a in m.columns and b in m.columns:
-        m[f"{metric}_delta"] = m[b] - m[a]
-
-m.to_csv(out_csv, index=False)
-
-band = m[(m[key] >= band_lo) & (m[key] <= band_hi)].copy()
-lines = []
-lines.append(f"P1={P1}  P2={P2}")
-lines.append(f"Band window: {band_lo}-{band_hi} Hz | Peak: {peak_hz} Hz")
-lines.append("")
-if "em_rms_delta" in band.columns and len(band) > 0:
-    lines.append("In-band EM_RMS delta (P2 - P1):")
-    lines.append(f"  mean: {band['em_rms_delta'].mean():.6f}")
-    lines.append(f"  min : {band['em_rms_delta'].min():.6f}")
-    lines.append(f"  max : {band['em_rms_delta'].max():.6f}")
-else:
-    lines.append("No em_rms_delta column found (check sweep columns).")
-
-out_band.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
-print("WROTE", out_csv)
-print("WROTE", out_band)
-"@ | Set-Content -Encoding UTF8 -LiteralPath $tmpPy
-
-py $tmpPy | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "Python compare failed (see error above). Aborting packet build." }
-
-# ---- Generate delta plots ----
-$tmpPy2 = Join-Path $env:TEMP ("ppn_ab_plots_{0}.py" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
-@"
-import pandas as pd
-from pathlib import Path
-import matplotlib.pyplot as plt
-import re
-
-ab_csv = Path(r"$abCsv")
-outdir = Path(r"$p2AB")
-df = pd.read_csv(ab_csv)
-df.columns = [c.strip().lower() for c in df.columns]
-x = df["drive_hz"]
-
-def plot_delta(col, fname, title):
-    if col not in df.columns:
-        print("SKIP missing", col)
-        return
-    y = df[col]
-    plt.figure()
-    plt.plot(x, y)
-    plt.axhline(0.0)
-    plt.title(title)
-    plt.xlabel("drive_hz")
-    plt.ylabel(col)
-    out = outdir / fname
-    plt.savefig(out, dpi=160, bbox_inches="tight")
-    plt.close()
-    print("WROTE", out)
-
-plot_delta("em_rms_delta",      "delta_em_rms_vs_drive_hz.png",      "Delta EM_RMS (P2 - P1) vs drive_hz")
-plot_delta("vib_rms_delta",     "delta_vib_rms_vs_drive_hz.png",     "Delta VIB_RMS (P2 - P1) vs drive_hz")
-plot_delta("chamber_rms_delta", "delta_chamber_rms_vs_drive_hz.png", "Delta CHAMBER_RMS (P2 - P1) vs drive_hz")
-
-band_txt = outdir / "AB_in_band_summary.txt"
-if band_txt.exists():
-    txt = band_txt.read_text(encoding="utf-8", errors="replace")
-    m = re.search(r"Band window:\s*([0-9.]+)-([0-9.]+)\s*Hz", txt)
-    if m:
-        lo = float(m.group(1)); hi = float(m.group(2))
-        band = df[(df["drive_hz"] >= lo) & (df["drive_hz"] <= hi)].copy()
-        if "em_rms_delta" in band.columns and len(band) > 0:
-            plt.figure()
-            plt.plot(band["drive_hz"], band['em_rms_delta'])
-            plt.axhline(0.0)
-            plt.title(f"In-band Delta EM_RMS (P2 - P1), {lo}-{hi} Hz")
-            plt.xlabel("drive_hz")
-            plt.ylabel("em_rms_delta")
-            out = outdir / "delta_em_rms_in_band.png"
-            plt.savefig(out, dpi=160, bbox_inches="tight")
-            plt.close()
-            print("WROTE", out)
-"@ | Set-Content -Encoding UTF8 -LiteralPath $tmpPy2
-
-py $tmpPy2 | Out-Host
-
-# ---- README + SHA256SUMS ----
-$bandTxt = (Get-Content -LiteralPath $abBand -Raw -Encoding UTF8).Trim()
-$metaTxt = (Get-Content -LiteralPath $abMeta -Raw -Encoding UTF8).Trim()
-@"
-# PPN A/B Compare - $P1 vs $P2
-
-This folder is the canonical Phase-1 vs Phase-2 comparison packet.
-It is intended to be human-reviewable truth (CSV + plots + pointers + hashes).
-
-## Inputs / Provenance
-```
-$metaTxt
-```
-
-## In-band definition (from Phase-1 best band)
-```
-$bandTxt
-```
-
-## What to open (recommended order)
-1) AB_in_band_summary.txt
-2) delta_em_rms_in_band.png
-3) delta_em_rms_vs_drive_hz.png
-4) AB_compare_P1_vs_P2.csv
-5) SHA256SUMS.txt
-
-## How to interpret deltas
-- All delta plots are P2 - P1.
-- Values near 0 across the band mean Phase-2 matches Phase-1 baseline behavior.
-- Consistent positive/negative shift in-band implies a systematic change in the band window.
-"@ | Set-Content -Encoding UTF8 -LiteralPath $readme
-
-Get-ChildItem -LiteralPath $p2AB -File |
-  Where-Object { $_.Name -ne "SHA256SUMS.txt" } |
-  Sort-Object Name |
-  ForEach-Object {
-    $h = Get-FileHash -Algorithm SHA256 $_.FullName
-    "{0}  {1}" -f $h.Hash.ToLower(), $_.Name
-  } | Set-Content -Encoding ASCII -LiteralPath $sumFile
-
-Push-Location $p2AB
-$failed = $false
-Get-Content -LiteralPath .\SHA256SUMS.txt | ForEach-Object {
-  $hash,$name = $_ -split "\s\s+",2
-  $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $name).Hash.ToLower()
-  if ($hash -ne $actual) { Write-Host "MISMATCH $name" -ForegroundColor Red; $script:failed = $true }
-  else { Write-Host "OK       $name" -ForegroundColor Green }
-}
-Pop-Location
-if ($failed) { throw "Hash verification failed for $P2 packet." }
-
-Write-Host "`n✅ CANONICAL A/B PACKET READY -> $p2AB" -ForegroundColor Green
-
-
-
-
-
-
-
-# ---- BundleDir (operator-grade): auto-pick latest P1 export bundle if not provided ----
-$exportsRoot = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}\_EXPORTS" -f $P1)
-if (-not $PSBoundParameters.ContainsKey("BundleDir") -or [string]::IsNullOrWhiteSpace($BundleDir)) {
-  if (-not (Test-Path -LiteralPath $exportsRoot)) { throw ("Missing exports root for P1: " + $exportsRoot) }
-  $candidate = Get-ChildItem -LiteralPath $exportsRoot -Directory |
-    Where-Object { $_.Name -like "resonance_engine_v1_bundle_*" } |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if (-not $candidate) { throw ("No export bundles found under: " + $exportsRoot) }
-  $BundleDir = $candidate.FullName
-}
-if (-not (Test-Path -LiteralPath $bestBandPath)) { throw ("Missing best_band.txt in bundle: " + $bestBandPath) }
-Write-Host ("[PPN] BundleDir -> " + $BundleDir) -ForegroundColor DarkCyan
-
-
-
-# ---- PPN: CANONICAL POINTER OVERWRITE V1 (BEGIN) ----
+# ---- PPN: EXPERIMENT REPRODUCIBILITY V1 (BEGIN) ----
 try {
   function Ppn-NormPath([string]$p) {
     if ([string]::IsNullOrWhiteSpace($p)) { return $p }
@@ -409,14 +189,14 @@ try {
     return "<unknown>"
   }
 
-  function Ppn-AssertPathHasToken([string]$Label, [string]$Path, [string]$Token) {
-    if ([string]::IsNullOrWhiteSpace($Path)) { throw ("Missing path for " + $Label) }
-    if ($Path -notlike ("*" + $Token + "*")) {
-      throw ("MIXED-ID FAIL: " + $Label + " path does not contain token [" + $Token + "]. Path=" + $Path)
-    }
+  function Ppn-Req([string]$Name, [object]$Val) {
+    if ($null -eq $Val) { throw ("Missing required condition: " + $Name) }
+    if ($Val -is [string] -and [string]::IsNullOrWhiteSpace([string]$Val)) { throw ("Missing required condition: " + $Name) }
   }
 
-  # Must exist by end-of-script
+  function Ppn-IsNaN([double]$d) { return [double]::IsNaN($d) }
+
+  # Must exist by end-of-script (your ab builder already defines these)
   if (-not (Get-Variable -Name p2AB -ErrorAction SilentlyContinue)) { throw "p2AB missing at end-of-script (unexpected)" }
   if (-not (Get-Variable -Name P1  -ErrorAction SilentlyContinue)) { throw "P1 missing at end-of-script (unexpected)" }
   if (-not (Get-Variable -Name P2  -ErrorAction SilentlyContinue)) { throw "P2 missing at end-of-script (unexpected)" }
@@ -424,43 +204,122 @@ try {
   if (-not (Get-Variable -Name BundleDir -ErrorAction SilentlyContinue)) { throw "BundleDir missing at end-of-script (unexpected)" }
   if (-not (Get-Variable -Name bestBandPath -ErrorAction SilentlyContinue)) { throw "bestBandPath missing at end-of-script (unexpected)" }
 
-  $p2Seed     = Join-Path $RepoRoot ("04_DATA\RAW\{0}\PHASE2_SEED_CONFIG.json" -f $P2)
-  $p1Sweep    = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\resonance_sweep.csv" -f $P1)
-  $p2Sweep    = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\resonance_sweep.csv" -f $P2)
-  $p2BestBand = Join-Path $RepoRoot ("04_DATA\PROCESSED\{0}\resonance_engine_v1\best_band.txt" -f $P2)
+  # RepoRoot should exist as a param in your script; fall back to git root if not
+  if (-not (Get-Variable -Name RepoRoot -ErrorAction SilentlyContinue)) { $RepoRoot = "M:/Plantery Pyramid Network" }
 
-  # Mixed-ID fail-fast guards
-  Ppn-AssertPathHasToken "exportsRoot"   $exportsRoot   $P1
-  Ppn-AssertPathHasToken "BundleDir"     $BundleDir     $P1
-  Ppn-AssertPathHasToken "bestBandPath"  $bestBandPath  $P1
-  Ppn-AssertPathHasToken "p2AB"          $p2AB          $P2
-  Ppn-AssertPathHasToken "p2Seed"        $p2Seed        $P2
-  Ppn-AssertPathHasToken "p1Sweep"       $p1Sweep       $P1
-  Ppn-AssertPathHasToken "p2Sweep"       $p2Sweep       $P2
-  Ppn-AssertPathHasToken "p2BestBand"    $p2BestBand    $P2
+  # Load condition profile JSON if provided (preferred), else allow direct CLI fields
+  $profileObj = $null
+  if (-not [string]::IsNullOrWhiteSpace($ConditionsPath)) {
+    if (-not (Test-Path -LiteralPath $ConditionsPath)) { throw ("ConditionsPath not found: " + $ConditionsPath) }
+    $profileObj = Get-Content -Raw -LiteralPath $ConditionsPath -Encoding UTF8 | ConvertFrom-Json
+  }
+  elseif (-not [string]::IsNullOrWhiteSpace($ConditionProfile)) {
+    $p = Join-Path $RepoRoot ("conditions\profiles\{0}.json" -f $ConditionProfile)
+    if (-not (Test-Path -LiteralPath $p)) { throw ("ConditionProfile not found: " + $p) }
+    $profileObj = Get-Content -Raw -LiteralPath $p -Encoding UTF8 | ConvertFrom-Json
+    $ConditionsPath = $p
+  }
 
-  $gitHead = Ppn-GitHead $RepoRoot
+  # STRICT MODE: require minimal defensible set (from profile if present, else from CLI fields)
+  if ($RequireConditions) {
+    if ($profileObj) {
+      Ppn-Req "profile" ($profileObj.profile)
+      Ppn-Req "environment.type" ($profileObj.environment.type)
+      Ppn-Req "mounting" ($profileObj.mounting)
+      Ppn-Req "drive_profile" ($profileObj.drive_profile)
+      Ppn-Req "sensor_pack" ($profileObj.sensor_pack)
+      Ppn-Req "sample_id" ($profileObj.sample_id)
+      Ppn-Req "operator" ($profileObj.operator)
+      # Key for dry/humid comparisons
+      if ($profileObj.environment.type -in @("dry","humid")) {
+        Ppn-Req "environment.humidity_rh" ($profileObj.environment.humidity_rh)
+        Ppn-Req "environment.temp_c" ($profileObj.environment.temp_c)
+      }
+    } else {
+      Ppn-Req "ConditionProfile/ConditionsPath" $ConditionProfile
+      Ppn-Req "Environment" $Environment
+      Ppn-Req "Mounting" $Mounting
+      Ppn-Req "DriveProfile" $DriveProfile
+      Ppn-Req "SensorPack" $SensorPack
+      Ppn-Req "SampleId" $SampleId
+      if (Ppn-IsNaN $HumidityRH) { throw "Missing required condition: HumidityRH" }
+      if (Ppn-IsNaN $TempC) { throw "Missing required condition: TempC" }
+    }
+  }
 
+  # Resolve effective condition values (profile overrides CLI when present)
+  $eff = [ordered]@{
+    schema = "PPN_RUN_CONDITIONS_V1"
+    run_id = ("PPN_RUN_" + [DateTime]::UtcNow.ToString("yyyyMMdd_HHmmss") + "_" + $P2)
+    timestamp_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    git_head = (Ppn-GitHead $RepoRoot)
+
+    P1 = $P1
+    P2 = $P2
+    exportsRoot = (Ppn-NormPath $exportsRoot)
+    BundleDir = (Ppn-NormPath $BundleDir)
+    bestBandPath_bundle = (Ppn-NormPath $bestBandPath)
+    ab_output_dir = (Ppn-NormPath $p2AB)
+
+    condition_profile = (if ($profileObj) { $profileObj.profile } else { $ConditionProfile })
+    conditions_path   = (if (-not [string]::IsNullOrWhiteSpace($ConditionsPath)) { (Ppn-NormPath $ConditionsPath) } else { "" })
+
+    environment = (if ($profileObj) { $profileObj.environment } else {
+      [ordered]@{
+        type = $Environment
+        humidity_rh = (if (Ppn-IsNaN $HumidityRH) { $null } else { $HumidityRH })
+        temp_c = (if (Ppn-IsNaN $TempC) { $null } else { $TempC })
+        pressure_kpa = (if (Ppn-IsNaN $PressureKPa) { $null } else { $PressureKPa })
+      }
+    })
+
+    mounting = (if ($profileObj) { $profileObj.mounting } else { $Mounting })
+    drive_profile = (if ($profileObj) { $profileObj.drive_profile } else { $DriveProfile })
+    sensor_pack = (if ($profileObj) { $profileObj.sensor_pack } else { $SensorPack })
+    sample_id = (if ($profileObj) { $profileObj.sample_id } else { $SampleId })
+    operator = (if ($profileObj) { $profileObj.operator } else { $Operator })
+    notes = (if ($profileObj -and $profileObj.notes) { $profileObj.notes } else { $Notes })
+
+    host = [ordered]@{
+      computer = $env:COMPUTERNAME
+      user = $env:USERNAME
+      os = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+      pwsh = $PSVersionTable.PSVersion.ToString()
+    }
+  }
+
+  $json = ($eff | ConvertTo-Json -Depth 12)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    $hash = $sha.ComputeHash($bytes)
+    $condSha = ($hash | ForEach-Object { $_.ToString("x2") }) -join ""
+  } finally { $sha.Dispose() }
+
+  $condPath = Join-Path $p2AB "RUN_CONDITIONS.json"
+  [IO.File]::WriteAllText($condPath, ($json + "
+"), (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host ("[PPN] WROTE RUN_CONDITIONS.json -> " + $condPath) -ForegroundColor DarkGreen
+
+  # Append reproducibility refs into pointer (if present)
   $ptrPath = Join-Path $p2AB "AB_inputs_pointer.txt"
-  $payload = @(
-    "PPN_CANONICAL_POINTER_V1"
-    ("timestamp_utc=" + [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
-    ("git_head=" + $gitHead)
-    ("P1=" + $P1)
-    ("P2=" + $P2)
-    ("exportsRoot=" + (Ppn-NormPath $exportsRoot))
-    ("BundleDir=" + (Ppn-NormPath $BundleDir))
-    ("bestBandPath_bundle=" + (Ppn-NormPath $bestBandPath))
-    ("p2Seed=" + (Ppn-NormPath $p2Seed))
-    ("p1Sweep=" + (Ppn-NormPath $p1Sweep))
-    ("p2Sweep=" + (Ppn-NormPath $p2Sweep))
-    ("bestBandPath_p2=" + (Ppn-NormPath $p2BestBand))
-  ) -join "`r`n"
+  if (Test-Path -LiteralPath $ptrPath) {
+    $append = @(
+      ""
+      "PPN_REPRODUCIBILITY_V1"
+      ("run_id=" + $eff.run_id)
+      ("conditions_path=" + (Ppn-NormPath $condPath))
+      ("conditions_sha256=" + $condSha)
+    ) -join "
+"
+    Add-Content -LiteralPath $ptrPath -Value ($append + "
+") -Encoding UTF8
+    Write-Host ("[PPN] Appended reproducibility refs -> " + $ptrPath) -ForegroundColor DarkGreen
+  } else {
+    Write-Host ("[PPN] NOTE: pointer not found to append reproducibility refs: " + $ptrPath) -ForegroundColor Yellow
+  }
 
-  [IO.File]::WriteAllText($ptrPath, $payload + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host ("[PPN] CANONICAL pointer overwrite -> " + $ptrPath) -ForegroundColor DarkGreen
+} catch {
+  throw ("PPN reproducibility layer failed: " + $_.Exception.Message)
 }
-catch {
-  throw ("PPN canonical pointer overwrite failed: " + $_.Exception.Message)
-}
-# ---- PPN: CANONICAL POINTER OVERWRITE V1 (END) ----
+# ---- PPN: EXPERIMENT REPRODUCIBILITY V1 (END) ----
