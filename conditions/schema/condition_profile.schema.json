@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "RGSR_CONDITION_PROFILE_V1_1",
+  "title": "RGSR Condition Profile V1.1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["profile", "environment", "mounting", "drive_profile", "sensor_pack", "sample_id"],
+  "properties": {
+    "profile": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string" },
+    "temp_c": { "type": "number" },
+    "humidity_rh": { "type": "number" },
+    "pressure_kpa": { "type": "number" },
+    "season": { "type": "string", "enum": ["spring","summer","autumn","winter"] },
+    "weather": { "type": "string", "enum": ["dry","rain","snow","fog","windy","storm"] },
+    "mounting": { "type": "string", "minLength": 1 },
+    "drive_profile": { "type": "string", "minLength": 1 },
+    "sensor_pack": { "type": "string", "minLength": 1 },
+    "sample_id": { "type": "string", "minLength": 1 },
+    "thermal": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ambient_temp_c": { "type": "number" },
+        "internal_air_temp_c": { "type": "number" },
+        "water_temp_c": { "type": "number" },
+        "inlet_water_temp_c": { "type": "number" },
+        "surface_temp_c": { "type": "number" },
+        "notes": { "type": "string" }
+      }
+    },
+    "water": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "level_mm": { "type": "number" },
+        "water_temp_c": { "type": "number" },
+        "inlet_water_temp_c": { "type": "number" },
+        "conductivity_us_cm": { "type": "number" },
+        "salinity_ppt": { "type": "number" },
+        "flow": { "type": "string" }
+      }
+    },
+    "geometry": { "type": "object", "additionalProperties": true },
+    "materials": { "type": "object", "additionalProperties": true }
+  }
+}

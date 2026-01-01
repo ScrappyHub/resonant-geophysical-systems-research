@@ -1,0 +1,8 @@
+# conditions/.gitinclude
+
+This repo intentionally tracks certain condition artifacts even if global ignore rules exclude the folder.
+Canonical tracked set:
+- conditions/schema/condition_profile.schema.json
+- conditions/profiles/*_BASELINE_V1_1.json
+
+Staging must use: git add -f <path>

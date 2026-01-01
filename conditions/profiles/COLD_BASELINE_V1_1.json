@@ -1,0 +1,15 @@
+{
+  "profile": "COLD_BASELINE_V1_1",
+  "environment": "lab",
+  "temp_c": 8,
+  "humidity_rh": 45,
+  "pressure_kpa": 101.3,
+  "season": "winter",
+  "weather": "dry",
+  "mounting": "MOUNT_V1",
+  "drive_profile": "DRIVE_SWEEP_0_150HZ_V1",
+  "sensor_pack": "SENS_V1",
+  "sample_id": "SAMPLE_V1",
+  "thermal": { "ambient_temp_c": 8, "internal_air_temp_c": 8 },
+  "water": { "enabled": false, "level_mm": 0 }
+}
