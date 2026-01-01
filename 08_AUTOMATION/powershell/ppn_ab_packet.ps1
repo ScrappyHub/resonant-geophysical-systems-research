@@ -141,7 +141,7 @@ $readmeSection = @(
 if (Test-Path -LiteralPath $ReadmePath) { $r = Get-Content -LiteralPath $ReadmePath -Raw -Encoding UTF8 } else { $r = "# Plantery Pyramid Network`r`n" }
 if ($r -match [regex]::Escape($sectionStart) -and $r -match [regex]::Escape($sectionEnd)) {
   $pattern = [regex]::Escape($sectionStart) + ".*?" + [regex]::Escape($sectionEnd)
-  $r = [regex]::Replace($r, $pattern, $readmeSection, 1, [Text.RegularExpressions.RegexOptions]::Singleline)
+Write-Host "[PPN] NOTE: README splice disabled (regex-timeout guard)" -ForegroundColor Yellow; $r = $r
 } else {
   $r = $r.TrimEnd() + "`r`n`r`n" + $readmeSection + "`r`n"
 }
