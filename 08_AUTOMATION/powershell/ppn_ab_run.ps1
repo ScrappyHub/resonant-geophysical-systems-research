@@ -39,14 +39,14 @@ function Sha256File([string]$path) {
   } finally { $sha.Dispose() }
 }
 
-# --- Resolve core script (stable AB packet builder) ---
-$script = Join-Path $RepoRoot "08_AUTOMATION\powershell\ppn_ab_packet.ps1"
-if (-not (Test-Path -LiteralPath $script)) { Fail "Missing core script: $script" }
+# --- Resolve core script (AB packet builder) ---
+$core = Join-Path $RepoRoot "08_AUTOMATION\powershell\ppn_ab_packet.ps1"
+if (-not (Test-Path -LiteralPath $core)) { Fail "Missing core script: $core" }
 
 # --- AB output dir is deterministic by convention ---
 $abDir = Join-Path $RepoRoot ("05_ANALYSIS\REPORTS\{0}\_AB_COMPARE" -f $P2)
 
-# --- Load condition profile (optional, but required in strict mode) ---
+# --- Load condition profile (optional; required in strict mode) ---
 $profileObj = $null
 $resolvedProfilePath = ""
 
@@ -63,27 +63,35 @@ if (-not [string]::IsNullOrWhiteSpace($resolvedProfilePath)) {
 
 if ($RequireConditions) {
   if (-not $profileObj) { Fail "RequireConditions set but no ConditionProfile/ConditionsPath provided." }
-  if (-not $profileObj.profile) { Fail "Condition profile JSON missing required field: profile" }
-  if (-not $profileObj.environment) { Fail "Condition profile JSON missing required field: environment" }
-  if (-not $profileObj.mounting) { Fail "Condition profile JSON missing required field: mounting" }
+  if (-not $profileObj.profile)       { Fail "Condition profile JSON missing required field: profile" }
+  if (-not $profileObj.environment)   { Fail "Condition profile JSON missing required field: environment" }
+  if (-not $profileObj.mounting)      { Fail "Condition profile JSON missing required field: mounting" }
   if (-not $profileObj.drive_profile) { Fail "Condition profile JSON missing required field: drive_profile" }
-  if (-not $profileObj.sensor_pack) { Fail "Condition profile JSON missing required field: sensor_pack" }
-  if (-not $profileObj.sample_id) { Fail "Condition profile JSON missing required field: sample_id" }
+  if (-not $profileObj.sensor_pack)   { Fail "Condition profile JSON missing required field: sensor_pack" }
+  if (-not $profileObj.sample_id)     { Fail "Condition profile JSON missing required field: sample_id" }
 }
 
 # --- Execute core AB packet builder first ---
 Write-Host ("[PPN] RUN core AB builder: P2=" + $P2) -ForegroundColor Cyan
-pwsh -NoProfile -ExecutionPolicy Bypass -File $script -RepoRoot $RepoRoot -P2 $P2
+pwsh -NoProfile -ExecutionPolicy Bypass -File $core -RepoRoot $RepoRoot -P2 $P2
 if ($LASTEXITCODE -ne 0) { Fail "Core AB builder failed (exit=$LASTEXITCODE)" }
 
 if (-not (Test-Path -LiteralPath $abDir)) { Fail "AB dir not found after run: $abDir" }
 
 # --- Build RUN_CONDITIONS.json (schema-stable) ---
-$gitHead = (git -C $RepoRoot rev-parse HEAD).Trim()
+$gitHead = ""
+try { $gitHead = (git -C $RepoRoot rev-parse HEAD).Trim() } catch {}
 if ([string]::IsNullOrWhiteSpace($gitHead)) { $gitHead = "<unknown>" }
 
 $runUtc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $runId  = ("PPN_RUN_{0}_{1}" -f ([DateTime]::UtcNow.ToString("yyyyMMdd_HHmmss")), $P2)
+
+$condProfileName = ""
+if ($profileObj -and $profileObj.profile) { $condProfileName = [string]$profileObj.profile }
+else { $condProfileName = $ConditionProfile }
+
+$condPathResolved = ""
+if (-not [string]::IsNullOrWhiteSpace($resolvedProfilePath)) { $condPathResolved = NormPath $resolvedProfilePath }
 
 $conditions = [ordered]@{
   schema        = "PPN_RUN_CONDITIONS_V1"
@@ -95,8 +103,8 @@ $conditions = [ordered]@{
   P2            = $P2
   ab_output_dir = (NormPath $abDir)
 
-  condition_profile = (if ($profileObj -and $profileObj.profile) { $profileObj.profile } else { $ConditionProfile })
-  conditions_path   = (if (-not [string]::IsNullOrWhiteSpace($resolvedProfilePath)) { (NormPath $resolvedProfilePath) } else { "" })
+  condition_profile = $condProfileName
+  conditions_path   = $condPathResolved
   profile           = $profileObj
 
   operator     = $Operator
@@ -113,17 +121,18 @@ $conditions = [ordered]@{
 $json = ($conditions | ConvertTo-Json -Depth 30)
 $condSha = (Sha256Text $json)
 
-$condPath = Join-Path $abDir "RUN_CONDITIONS.json"
-[IO.File]::WriteAllText($condPath, $json + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
-Write-Host ("[PPN] WROTE RUN_CONDITIONS.json -> " + $condPath) -ForegroundColor DarkGreen
+$condOutPath = Join-Path $abDir "RUN_CONDITIONS.json"
+[IO.File]::WriteAllText($condOutPath, $json + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
+Write-Host ("[PPN] WROTE RUN_CONDITIONS.json -> " + $condOutPath) -ForegroundColor DarkGreen
 Write-Host ("[PPN] CONDITIONS_SHA256 -> " + $condSha) -ForegroundColor DarkGreen
 
-# --- Write SHA256SUMS for key artifacts (extend over time) ---
+# --- Write SHA256SUMS for key artifacts ---
 $artifacts = @(
   "AB_compare_P1_vs_P2.csv",
   "AB_in_band_summary.txt",
   "AB_inputs_pointer.txt",
   "RUN_CONDITIONS.json",
+  "README_HANDOFF.md",
   "delta_em_rms_in_band.png",
   "delta_em_rms_vs_drive_hz.png",
   "delta_vib_rms_vs_drive_hz.png",
@@ -135,7 +144,7 @@ foreach ($a in $artifacts) {
   $p = Join-Path $abDir $a
   if (Test-Path -LiteralPath $p) {
     $h = Sha256File $p
-    $sumLines.Add(("{0}  {1}" -f $h, $a))
+    if ($h) { $sumLines.Add(("{0}  {1}" -f $h, $a)) }
   }
 }
 
@@ -150,7 +159,7 @@ if (Test-Path -LiteralPath $ptrPath) {
     ""
     "PPN_REPRODUCIBILITY_V1"
     ("run_id=" + $runId)
-    ("conditions_path=" + (NormPath $condPath))
+    ("conditions_path=" + (NormPath $condOutPath))
     ("conditions_sha256=" + $condSha)
     ("sha256sums_path=" + (NormPath $sumPath))
   ) -join "`r`n"
