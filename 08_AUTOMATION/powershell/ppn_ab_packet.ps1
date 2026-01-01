@@ -1,6 +1,7 @@
 param(
   [string]$RepoRoot = "M:\Plantery Pyramid Network",
-  [switch]$EnableRunnerTempCleanup
+  [switch]$EnableRunnerTempCleanup,
+  [switch]$NoReadmeWrite = $false,
 )
 
 Set-StrictMode -Version Latest
