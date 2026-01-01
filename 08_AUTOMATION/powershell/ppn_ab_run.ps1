@@ -1,8 +1,5 @@
 param(
-  [Parameter(Mandatory)
-  [switch]$NoReadmeWrite = $true
-)
-][string]$RepoRoot,
+  [Parameter(Mandatory)][string]$RepoRoot,
   [Parameter(Mandatory)][string]$P2,
 
   # Reproducibility controls
@@ -10,7 +7,10 @@ param(
   [string]$ConditionProfile = "",         # e.g. DRY_BASELINE_V1
   [string]$ConditionsPath = "",           # optional direct json path
   [string]$Operator = "",
-  [string]$Notes = ""
+  [string]$Notes = "",
+
+  # Stability controls
+  [switch]$NoReadmeWrite = $true
 )
 
 Set-StrictMode -Version Latest
@@ -76,7 +76,13 @@ if ($RequireConditions) {
 
 # --- Execute core AB packet builder first ---
 Write-Host ("[PPN] RUN core AB builder: P2=" + $P2) -ForegroundColor Cyan
-pwsh -NoProfile -ExecutionPolicy Bypass -File $core -RepoRoot $RepoRoot -P2 $P2 -NoReadmeWrite:$NoReadmeWrite
+
+if ($NoReadmeWrite) {
+  pwsh -NoProfile -ExecutionPolicy Bypass -File $core -RepoRoot $RepoRoot -P2 $P2 -NoReadmeWrite
+} else {
+  pwsh -NoProfile -ExecutionPolicy Bypass -File $core -RepoRoot $RepoRoot -P2 $P2
+}
+
 if ($LASTEXITCODE -ne 0) { Fail "Core AB builder failed (exit=$LASTEXITCODE)" }
 
 if (-not (Test-Path -LiteralPath $abDir)) { Fail "AB dir not found after run: $abDir" }
@@ -113,6 +119,8 @@ $conditions = [ordered]@{
   operator     = $Operator
   notes        = $Notes
 
+  no_readme_write = [bool]$NoReadmeWrite
+
   host = [ordered]@{
     computer = $env:COMPUTERNAME
     user     = $env:USERNAME
@@ -135,7 +143,7 @@ $artifacts = @(
   "AB_in_band_summary.txt",
   "AB_inputs_pointer.txt",
   "RUN_CONDITIONS.json",
-  "README_HANDOFF.md",
+  "SHA256SUMS.txt",
   "delta_em_rms_in_band.png",
   "delta_em_rms_vs_drive_hz.png",
   "delta_vib_rms_vs_drive_hz.png",
