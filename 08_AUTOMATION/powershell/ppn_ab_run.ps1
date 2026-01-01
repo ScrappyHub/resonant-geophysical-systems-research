@@ -1,5 +1,8 @@
 param(
-  [Parameter(Mandatory)][string]$RepoRoot,
+  [Parameter(Mandatory)
+  [switch]$NoReadmeWrite = $true
+)
+][string]$RepoRoot,
   [Parameter(Mandatory)][string]$P2,
 
   # Reproducibility controls
@@ -73,7 +76,7 @@ if ($RequireConditions) {
 
 # --- Execute core AB packet builder first ---
 Write-Host ("[PPN] RUN core AB builder: P2=" + $P2) -ForegroundColor Cyan
-pwsh -NoProfile -ExecutionPolicy Bypass -File $core -RepoRoot $RepoRoot -P2 $P2
+pwsh -NoProfile -ExecutionPolicy Bypass -File $core -RepoRoot $RepoRoot -P2 $P2 -NoReadmeWrite:$NoReadmeWrite
 if ($LASTEXITCODE -ne 0) { Fail "Core AB builder failed (exit=$LASTEXITCODE)" }
 
 if (-not (Test-Path -LiteralPath $abDir)) { Fail "AB dir not found after run: $abDir" }

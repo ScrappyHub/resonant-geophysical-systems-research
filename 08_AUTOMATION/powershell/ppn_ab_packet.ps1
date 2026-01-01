@@ -145,8 +145,11 @@ Write-Host "[PPN] NOTE: README splice disabled (regex-timeout guard)" -Foregroun
 } else {
   $r = $r.TrimEnd() + "`r`n`r`n" + $readmeSection + "`r`n"
 }
-Write-FileUtf8 $ReadmePath $r
-
+if (-not $NoReadmeWrite) {
+  Write-FileUtf8 $ReadmePath $r
+} else {
+  Write-Host "[PPN] NOTE: README write skipped (-NoReadmeWrite)" -ForegroundColor DarkCyan
+}
 # ----------------------------
 # Optional TEMP cleanup patch (no $_ expansion)
 # ----------------------------
