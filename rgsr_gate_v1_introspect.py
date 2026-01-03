@@ -156,7 +156,9 @@ def main():
   top_keys_list = [(k, int(v)) for k, v in top_keys.most_common(80)]
 
   summary = {
-    "files_scanned": files_scanned,
+      "schema_version": 1,
+    "measure_keys": sorted(list(MEASURE_KEYS)),
+"files_scanned": files_scanned,
     "results_path_nodes_seen": results_path_nodes_seen,
     "configs_detected": configs_detected,
     "frames_detected": len(frames),
@@ -217,3 +219,4 @@ def main():
 
 if __name__ == "__main__":
   raise SystemExit(main())
+
