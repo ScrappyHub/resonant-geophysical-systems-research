@@ -34,3 +34,12 @@ Thumbs.db
 _rgsr_reports/
 *.bak_*
 *.BROKEN_*.bak
+# RGSR / local outputs
+_rgsr_reports/
+
+# Supabase CLI local state (never commit)
+supabase/.temp/
+
+# Backup artifacts
+*.bak_*
+*.BROKEN_*.bak
