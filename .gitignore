@@ -43,3 +43,5 @@ supabase/.temp/
 # Backup artifacts
 *.bak_*
 *.BROKEN_*.bak
+# Legacy / local gates (do not commit)
+rgsr_gate_v0.ps1
