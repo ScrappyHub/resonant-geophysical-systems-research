@@ -31,3 +31,6 @@ Thumbs.db
 # Local bootstrap markers
 07_SOFTWARE/python/.ppn_bootstrap_ok
 
+_rgsr_reports/
+*.bak_*
+*.BROKEN_*.bak
