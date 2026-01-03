@@ -1,0 +1,272 @@
+param(
+  [Parameter(Mandatory)][string]$RepoRoot,
+  [string]$MigrationId = "",
+  [switch]$LinkProject,
+  [string]$ProjectRef = "",
+  [switch]$ApplyRemote
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function EnsureDir([string]$p) { if (-not (Test-Path -LiteralPath $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null } }
+function WriteUtf8NoBomIfChanged([string]$Path, [string]$Content) {
+  $dir = Split-Path -Parent $Path
+  if ($dir) { EnsureDir $dir }
+  $enc = New-Object System.Text.UTF8Encoding($false)
+  $existing = $null
+  if (Test-Path -LiteralPath $Path) { $existing = Get-Content -Raw -LiteralPath $Path -Encoding UTF8 }
+  if ($existing -ne $Content) {
+    [IO.File]::WriteAllText($Path, $Content, $enc)
+    Write-Host ("[OK] WROTE " + $Path) -ForegroundColor DarkGreen
+  } else {
+    Write-Host ("[OK] NO-CHANGE " + $Path) -ForegroundColor DarkCyan
+  }
+}
+
+if (-not (Test-Path -LiteralPath $RepoRoot)) { throw "RepoRoot not found: $RepoRoot" }
+Set-Location $RepoRoot
+
+$mgDir = Join-Path $RepoRoot "supabase\migrations"
+EnsureDir $mgDir
+
+if (-not $MigrationId) { $MigrationId = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss") }
+$mgPath = Join-Path $mgDir ("{0}_rgsr_geometry_seed_and_clone_v1.sql" -f $MigrationId)
+
+$sqlLines = New-Object System.Collections.Generic.List[string]
+
+$sqlLines.Add('-- ============================================================')
+$sqlLines.Add('-- RGSR: Geometry Seeds + Clone + Library RPCs (V1)')
+$sqlLines.Add('-- Canonical: seed PUBLISHED templates (6x6 grid, pyramid)')
+$sqlLines.Add('-- Adds clone RPC so UI never copies JSON manually.')
+$sqlLines.Add('-- ============================================================')
+$sqlLines.Add('')
+$sqlLines.Add('begin;')
+$sqlLines.Add('')
+$sqlLines.Add('-- 1) Library RPC: list visible geometry (PRIVATE + LAB + PUBLISHED)')
+$sqlLines.Add('create or replace function rgsr.list_geometry_library(')
+$sqlLines.Add('  p_engine_code text default ''RGSR'',')
+$sqlLines.Add('  p_only_templates boolean default false')
+$sqlLines.Add(')')
+$sqlLines.Add('returns table(')
+$sqlLines.Add('  geometry_id uuid,')
+$sqlLines.Add('  name text,')
+$sqlLines.Add('  description text,')
+$sqlLines.Add('  lane rgsr.rgsr_lane,')
+$sqlLines.Add('  is_template boolean,')
+$sqlLines.Add('  engine_code text,')
+$sqlLines.Add('  owner_id uuid,')
+$sqlLines.Add('  lab_id uuid,')
+$sqlLines.Add('  created_at timestamptz,')
+$sqlLines.Add('  updated_at timestamptz')
+$sqlLines.Add(')')
+$sqlLines.Add('language sql stable as $$')
+$sqlLines.Add('  select')
+$sqlLines.Add('    g.geometry_id, g.name, g.description, g.lane, g.is_template, g.engine_code, g.owner_id, g.lab_id, g.created_at, g.updated_at')
+$sqlLines.Add('  from rgsr.geometry_sets g')
+$sqlLines.Add('  where g.engine_code = p_engine_code')
+$sqlLines.Add('    and (p_only_templates is false or g.is_template is true)')
+$sqlLines.Add('    and rgsr.can_read_geometry(g.lane, g.owner_id, g.lab_id)')
+$sqlLines.Add('  order by')
+$sqlLines.Add('    case g.lane when ''PUBLISHED'' then 1 when ''LAB'' then 2 when ''REVIEW'' then 3 else 4 end,')
+$sqlLines.Add('    g.created_at desc;')
+$sqlLines.Add('$$;')
+$sqlLines.Add('')
+$sqlLines.Add('-- 2) Get geometry details (returns JSON) - RLS still applies because it SELECTs from table')
+$sqlLines.Add('create or replace function rgsr.get_geometry_set(p_geometry_id uuid)')
+$sqlLines.Add('returns table(')
+$sqlLines.Add('  geometry_id uuid,')
+$sqlLines.Add('  name text,')
+$sqlLines.Add('  description text,')
+$sqlLines.Add('  lane rgsr.rgsr_lane,')
+$sqlLines.Add('  is_template boolean,')
+$sqlLines.Add('  engine_code text,')
+$sqlLines.Add('  owner_id uuid,')
+$sqlLines.Add('  lab_id uuid,')
+$sqlLines.Add('  geometry_json jsonb,')
+$sqlLines.Add('  dims_json jsonb,')
+$sqlLines.Add('  created_at timestamptz,')
+$sqlLines.Add('  updated_at timestamptz')
+$sqlLines.Add(')')
+$sqlLines.Add('language sql stable as $$')
+$sqlLines.Add('  select')
+$sqlLines.Add('    g.geometry_id, g.name, g.description, g.lane, g.is_template, g.engine_code, g.owner_id, g.lab_id, g.geometry_json, g.dims_json, g.created_at, g.updated_at')
+$sqlLines.Add('  from rgsr.geometry_sets g')
+$sqlLines.Add('  where g.geometry_id = p_geometry_id')
+$sqlLines.Add('    and rgsr.can_read_geometry(g.lane, g.owner_id, g.lab_id);')
+$sqlLines.Add('$$;')
+$sqlLines.Add('')
+$sqlLines.Add('-- 3) Clone RPC (template -> my PRIVATE or LAB)')
+$sqlLines.Add('-- IMPORTANT: this is SECURITY DEFINER but enforces auth + target lane capability checks explicitly')
+$sqlLines.Add('create or replace function rgsr.clone_geometry_set(')
+$sqlLines.Add('  p_source_geometry_id uuid,')
+$sqlLines.Add('  p_new_name text,')
+$sqlLines.Add('  p_target_lane rgsr.rgsr_lane default ''PRIVATE'',')
+$sqlLines.Add('  p_target_lab_id uuid default null,')
+$sqlLines.Add('  p_make_template boolean default false')
+$sqlLines.Add(')')
+$sqlLines.Add('returns uuid')
+$sqlLines.Add('language plpgsql')
+$sqlLines.Add('security definer')
+$sqlLines.Add('set search_path = rgsr, public, auth as $$')
+$sqlLines.Add('declare')
+$sqlLines.Add('  src record;')
+$sqlLines.Add('  new_id uuid;')
+$sqlLines.Add('begin')
+$sqlLines.Add('  if auth.uid() is null then')
+$sqlLines.Add('    raise exception ''not authenticated'' using errcode = ''insufficient_privilege'';')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  select * into src')
+$sqlLines.Add('  from rgsr.geometry_sets g')
+$sqlLines.Add('  where g.geometry_id = p_source_geometry_id')
+$sqlLines.Add('    and rgsr.can_read_geometry(g.lane, g.owner_id, g.lab_id)')
+$sqlLines.Add('  limit 1;')
+$sqlLines.Add('')
+$sqlLines.Add('  if not found then')
+$sqlLines.Add('    raise exception ''source geometry not found or not readable'' using errcode = ''invalid_parameter_value'';')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  if p_new_name is null or length(trim(p_new_name)) = 0 then')
+$sqlLines.Add('    raise exception ''new name is required'' using errcode = ''invalid_parameter_value'';')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  -- target lane rules')
+$sqlLines.Add('  if not rgsr.can_write_geometry_target(p_target_lane, p_target_lab_id) then')
+$sqlLines.Add('    raise exception ''not authorized for target lane'' using errcode = ''insufficient_privilege'';')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  -- if LAB/REVIEW lane, must be lab member')
+$sqlLines.Add('  if p_target_lane in (''LAB'',''REVIEW'') then')
+$sqlLines.Add('    if p_target_lab_id is null then')
+$sqlLines.Add('      raise exception ''target lab required for LAB/REVIEW'' using errcode = ''invalid_parameter_value'';')
+$sqlLines.Add('    end if;')
+$sqlLines.Add('    if not rgsr.is_lab_member(p_target_lab_id) then')
+$sqlLines.Add('      raise exception ''not a member of target lab'' using errcode = ''insufficient_privilege'';')
+$sqlLines.Add('    end if;')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  -- template flag requires capability')
+$sqlLines.Add('  if p_make_template is true and not rgsr.has_capability(''GEOMETRY_TEMPLATE'') then')
+$sqlLines.Add('    raise exception ''not authorized to mark template'' using errcode = ''insufficient_privilege'';')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  insert into rgsr.geometry_sets(')
+$sqlLines.Add('    name, description, lane, is_template, engine_code, owner_id, lab_id, geometry_json, dims_json')
+$sqlLines.Add('  ) values (')
+$sqlLines.Add('    trim(p_new_name), src.description, p_target_lane, p_make_template, src.engine_code, auth.uid(), p_target_lab_id, src.geometry_json, src.dims_json')
+$sqlLines.Add('  ) returning geometry_id into new_id;')
+$sqlLines.Add('')
+$sqlLines.Add('  return new_id;')
+$sqlLines.Add('end;')
+$sqlLines.Add('$$;')
+$sqlLines.Add('')
+$sqlLines.Add('-- 4) Canonical seeds: PUBLISHED templates (owner = first SYS_ADMIN user if exists, else auth.uid() at runtime is not available in migration)')
+$sqlLines.Add('-- We seed with a stable synthetic owner: use auth.users where email matches current project owner is unknown; so we use NULL owner? Not allowed.')
+$sqlLines.Add('-- Canonical approach: seed templates as PRIVATE owned by the first existing user_profile with SYS_ADMIN role, then allow promotion to PUBLISHED via UI.')
+$sqlLines.Add('-- If none exists yet, we still insert as PRIVATE using a placeholder function that finds any user_id.')
+$sqlLines.Add('create or replace function rgsr._seed_owner_any_user()')
+$sqlLines.Add('returns uuid language sql stable as $$')
+$sqlLines.Add('  select coalesce(')
+$sqlLines.Add('    (select up.user_id from rgsr.user_profiles up where up.role_id = ''SYS_ADMIN''::rgsr.rgsr_role_id order by up.created_at asc limit 1),')
+$sqlLines.Add('    (select up.user_id from rgsr.user_profiles up order by up.created_at asc limit 1)')
+$sqlLines.Add('  );')
+$sqlLines.Add('$$;')
+$sqlLines.Add('')
+$sqlLines.Add('do $$')
+$sqlLines.Add('declare')
+$sqlLines.Add('  seed_owner uuid;')
+$sqlLines.Add('begin')
+$sqlLines.Add('  seed_owner := rgsr._seed_owner_any_user();')
+$sqlLines.Add('  if seed_owner is null then')
+$sqlLines.Add('    -- no users yet; skip seeds safely')
+$sqlLines.Add('    return;')
+$sqlLines.Add('  end if;')
+$sqlLines.Add('')
+$sqlLines.Add('  -- 6x6 Grid template')
+$sqlLines.Add('  insert into rgsr.geometry_sets(name, description, lane, is_template, engine_code, owner_id, lab_id, geometry_json, dims_json)')
+$sqlLines.Add('  values (')
+$sqlLines.Add('    ''RGSR Grid 6x6 (Canonical)'',')
+$sqlLines.Add('    ''Canonical 6x6 node grid template for Phase A resonance capture.'',')
+$sqlLines.Add('    ''PUBLISHED'',')
+$sqlLines.Add('    true,')
+$sqlLines.Add('    ''RGSR'',')
+$sqlLines.Add('    seed_owner,')
+$sqlLines.Add('    null,')
+$sqlLines.Add('    jsonb_build_object(')
+$sqlLines.Add('      ''type'',''grid'',')
+$sqlLines.Add('      ''rows'',6,')
+$sqlLines.Add('      ''cols'',6,')
+$sqlLines.Add('      ''labels'', jsonb_build_object(')
+$sqlLines.Add('        ''x_axis'',''A-F'',')
+$sqlLines.Add('        ''y_axis'',''1-6''')
+$sqlLines.Add('      ),')
+$sqlLines.Add('      ''nodes'', (')
+$sqlLines.Add('        select jsonb_agg(jsonb_build_object(')
+$sqlLines.Add('          ''id'', format(''%s%s'', chr(64+xc), yc),')
+$sqlLines.Add('          ''x'', xc,')
+$sqlLines.Add('          ''y'', yc')
+$sqlLines.Add('        ) order by yc, xc)')
+$sqlLines.Add('        from generate_series(1,6) as yc')
+$sqlLines.Add('        cross join generate_series(1,6) as xc')
+$sqlLines.Add('      )')
+$sqlLines.Add('    ),')
+$sqlLines.Add('    jsonb_build_object(')
+$sqlLines.Add('      ''units'',''cm'',')
+$sqlLines.Add('      ''spacing'', jsonb_build_object(''x'',10,''y'',10),')
+$sqlLines.Add('      ''origin'', jsonb_build_object(''x'',0,''y'',0),')
+$sqlLines.Add('      ''notes'',''Synthetic default dims; replace with chamber-calibrated dims when available.''')
+$sqlLines.Add('    )')
+$sqlLines.Add('  )')
+$sqlLines.Add('  on conflict do nothing;')
+$sqlLines.Add('')
+$sqlLines.Add('  -- Pyramid template (symbolic layout)')
+$sqlLines.Add('  insert into rgsr.geometry_sets(name, description, lane, is_template, engine_code, owner_id, lab_id, geometry_json, dims_json)')
+$sqlLines.Add('  values (')
+$sqlLines.Add('    ''RGSR Pyramid (Canonical)'',')
+$sqlLines.Add('    ''Canonical pyramid geometry placeholder (symbolic) for future chamber mapping.'',')
+$sqlLines.Add('    ''PUBLISHED'',')
+$sqlLines.Add('    true,')
+$sqlLines.Add('    ''RGSR'',')
+$sqlLines.Add('    seed_owner,')
+$sqlLines.Add('    null,')
+$sqlLines.Add('    jsonb_build_object(')
+$sqlLines.Add('      ''type'',''pyramid'',')
+$sqlLines.Add('      ''tiers'',4,')
+$sqlLines.Add('      ''nodes_per_tier'', jsonb_build_array(1,4,9,16),')
+$sqlLines.Add('      ''notes'',''Symbolic pyramid topology; wire real coordinates when instrumentation is defined.''')
+$sqlLines.Add('    ),')
+$sqlLines.Add('    jsonb_build_object(')
+$sqlLines.Add('      ''units'',''cm'',')
+$sqlLines.Add('      ''bounds'', jsonb_build_object(''width'',60,''depth'',60,''height'',50),')
+$sqlLines.Add('      ''notes'',''Synthetic default dims; replace with real pyramid/chamber dims.''')
+$sqlLines.Add('    )')
+$sqlLines.Add('  )')
+$sqlLines.Add('  on conflict do nothing;')
+$sqlLines.Add('end$$;')
+$sqlLines.Add('')
+$sqlLines.Add('commit;')
+$sqlLines.Add('')
+$sqlLines.Add('-- ============================================================')
+$sqlLines.Add('-- End migration')
+$sqlLines.Add('-- ============================================================')
+
+$sql = ($sqlLines -join "`r`n") + "`r`n"
+WriteUtf8NoBomIfChanged $mgPath $sql
+Write-Host ("[OK] MIGRATION READY: " + $mgPath) -ForegroundColor Green
+
+if ($LinkProject) {
+  if (-not $ProjectRef) {
+    Write-Host "[NOTE] Paste Supabase Project Ref (Settings -> General -> Project Ref)" -ForegroundColor Yellow
+    $ProjectRef = Read-Host "ProjectRef"
+  }
+  if (-not $ProjectRef) { throw "ProjectRef is required for link." }
+  supabase link --project-ref $ProjectRef
+}
+
+if ($ApplyRemote) {
+  supabase db push
+}
+
+Write-Host "✅ RGSR GEOMETRY SEED + CLONE PIPELINE COMPLETE" -ForegroundColor Green
+
