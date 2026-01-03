@@ -1,0 +1,307 @@
+-- ============================================================
+-- RGSR v10: Labs + Lane-Gated Runs/Measurements/Artifacts (GOVERNED)
+-- - Adds rgsr.labs + rgsr.lab_members for explicit lane authorization
+-- - Adds rgsr.runs + rgsr.run_measurements + rgsr.run_artifacts
+-- - STRICT lane-based RLS to prevent leakage:
+--     PUBLIC: readable by authenticated
+--     LAB: readable only by lab members or sys_admin/service_role
+--     INTERNAL: readable only by sys_admin/service_role
+--   Writes: sys_admin/service_role only (canonical governed baseline)
+-- - Optional FK attachments via introspection (NO ASSUMPTIONS)
+-- ============================================================
+
+begin;
+
+-- ------------------------------------------------------------
+-- 0) Governance helpers (idempotent)
+-- ------------------------------------------------------------
+create or replace function rgsr.is_sys_admin()
+returns boolean
+language sql stable as $sql$
+  select coalesce((select (auth.jwt() -> 'app_metadata' ->> 'role') = 'sys_admin'), false);
+$sql$;
+
+create or replace function rgsr.is_service_role()
+returns boolean
+language sql stable as $sql$
+  select coalesce((select (auth.jwt() ->> 'role') = 'service_role'), false);
+$sql$;
+
+create or replace function rgsr.me()
+returns uuid
+language sql stable as $sql$
+  select auth.uid();
+$sql$;
+
+-- Lab access: explicit membership table controls LAB lane visibility
+create or replace function rgsr.has_lab_access(p_lab_id uuid)
+returns boolean
+language sql stable as $sql$
+  select
+    rgsr.is_sys_admin() or rgsr.is_service_role()
+    or (p_lab_id is not null and exists (
+      select 1 from rgsr.lab_members m
+      where m.lab_id = p_lab_id and m.user_id = rgsr.me() and m.is_active = true
+    ));
+$sql$;
+
+-- Lane read gate (prevents leakage)
+create or replace function rgsr.can_read_lane(p_lane text, p_lab_id uuid)
+returns boolean
+language sql stable as $sql$
+  select
+    case
+      when p_lane = 'PUBLIC' then (rgsr.me() is not null)
+      when p_lane = 'LAB' then rgsr.has_lab_access(p_lab_id)
+      when p_lane = 'INTERNAL' then (rgsr.is_sys_admin() or rgsr.is_service_role())
+      else false
+    end;
+$sql$;
+
+-- Write gate (canonical: sys_admin/service_role only)
+create or replace function rgsr.can_write()
+returns boolean
+language sql stable as $sql$
+  select (rgsr.is_sys_admin() or rgsr.is_service_role());
+$sql$;
+
+-- ------------------------------------------------------------
+-- 1) Labs + membership (authorization substrate)
+-- ------------------------------------------------------------
+create table if not exists rgsr.labs (
+  lab_id uuid primary key default gen_random_uuid(),
+  lane text not null default 'LAB',
+  lab_code text not null unique,
+  display_name text not null,
+  description text null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint labs_lane_chk check (lane in ('LAB','INTERNAL'))
+);
+create index if not exists ix_labs_code on rgsr.labs(lab_code);
+
+create table if not exists rgsr.lab_members (
+  membership_id uuid primary key default gen_random_uuid(),
+  lab_id uuid not null references rgsr.labs(lab_id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  member_role text not null default 'MEMBER',  -- OWNER|ADMIN|MEMBER|VIEWER
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint lab_members_role_chk check (member_role in ('OWNER','ADMIN','MEMBER','VIEWER')),
+  constraint lab_members_unique unique (lab_id, user_id)
+);
+create index if not exists ix_lab_members_lab on rgsr.lab_members(lab_id);
+create index if not exists ix_lab_members_user on rgsr.lab_members(user_id);
+
+-- ------------------------------------------------------------
+-- 2) Runs (canonical experiment ledger)
+-- ------------------------------------------------------------
+create table if not exists rgsr.runs (
+  run_id uuid primary key default gen_random_uuid(),
+
+  lane text not null default 'LAB',              -- PUBLIC|LAB|INTERNAL
+  lab_id uuid null references rgsr.labs(lab_id) on delete set null,
+
+  status text not null default 'PLANNED',        -- PLANNED|ACTIVE|COMPLETE|ABORTED
+  run_code text null unique,
+  title text null,
+  purpose text null,
+
+  started_at timestamptz null,
+  ended_at timestamptz null,
+
+  -- Optional linkage to materials/geology (FKs added via introspection below)
+  container_material_id uuid null,
+  chamber_structure_id uuid null,
+  substrate_structure_id uuid null,
+
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  metadata jsonb not null default '{}'::jsonb,
+
+  constraint runs_lane_chk check (lane in ('PUBLIC','LAB','INTERNAL')),
+  constraint runs_status_chk check (status in ('PLANNED','ACTIVE','COMPLETE','ABORTED')),
+  constraint runs_time_chk check (ended_at is null or started_at is null or ended_at >= started_at)
+);
+create index if not exists ix_runs_lane on rgsr.runs(lane);
+create index if not exists ix_runs_lab on rgsr.runs(lab_id);
+create index if not exists ix_runs_status on rgsr.runs(status);
+create index if not exists ix_runs_created_at on rgsr.runs(created_at);
+
+-- ------------------------------------------------------------
+-- 3) Run measurements (time-series facts; no prose claims)
+-- ------------------------------------------------------------
+create table if not exists rgsr.run_measurements (
+  measurement_id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references rgsr.runs(run_id) on delete cascade,
+
+  measured_at timestamptz not null default now(),
+  domain text not null,                              -- WATER|EM|THERMAL|ACOUSTIC|CHEM|PRESSURE|OTHER
+  metric_key text not null,                          -- canonical key e.g. water.temp_c
+  unit text null,
+
+  value_num numeric null,
+  value_text text null,
+  value_json jsonb null,
+
+  quality_flags jsonb not null default '{}'::jsonb,
+  source_instrument jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+
+  created_at timestamptz not null default now(),
+
+  constraint rm_domain_chk check (domain in ('WATER','EM','THERMAL','ACOUSTIC','CHEM','PRESSURE','OTHER')),
+  constraint rm_metric_chk check (length(metric_key) > 0),
+  constraint rm_one_value_chk check (
+    (case when value_num  is null then 0 else 1 end) +
+    (case when value_text is null then 0 else 1 end) +
+    (case when value_json is null then 0 else 1 end)
+    = 1
+  )
+);
+create index if not exists ix_rm_run on rgsr.run_measurements(run_id);
+create index if not exists ix_rm_measured_at on rgsr.run_measurements(measured_at);
+create index if not exists ix_rm_domain_metric on rgsr.run_measurements(domain, metric_key);
+
+-- ------------------------------------------------------------
+-- 4) Run artifacts (external files registry; hashes for integrity)
+-- ------------------------------------------------------------
+create table if not exists rgsr.run_artifacts (
+  artifact_id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references rgsr.runs(run_id) on delete cascade,
+
+  artifact_kind text not null,            -- SPECTRUM|LOG|CSV|IMAGE|VIDEO|OTHER
+  artifact_uri text not null,             -- storage URL/path (no blobs here)
+  artifact_hash text null,                -- integrity hash (optional but recommended)
+  content_type text null,
+  byte_size bigint null,
+
+  created_at timestamptz not null default now(),
+  metadata jsonb not null default '{}'::jsonb,
+
+  constraint ra_kind_chk check (artifact_kind in ('SPECTRUM','LOG','CSV','IMAGE','VIDEO','OTHER')),
+  constraint ra_uri_chk check (length(artifact_uri) > 0)
+);
+create index if not exists ix_ra_run on rgsr.run_artifacts(run_id);
+create index if not exists ix_ra_kind on rgsr.run_artifacts(artifact_kind);
+create index if not exists ix_ra_created_at on rgsr.run_artifacts(created_at);
+
+-- ------------------------------------------------------------
+-- 5) Optional FK attachments (introspection; no assumptions)
+-- ------------------------------------------------------------
+do $do$
+begin
+  -- Attach run_conditions.run_id -> rgsr.runs.run_id if run_conditions exists (from v9.1)
+  if exists (select 1 from information_schema.tables where table_schema='rgsr' and table_name='run_conditions') then
+    begin
+      execute 'alter table rgsr.run_conditions
+               add constraint fk_run_conditions_run_v10
+               foreign key (run_id) references rgsr.runs(run_id) on delete set null';
+    exception when duplicate_object then null;
+    end;
+  end if;
+
+  -- Attach runs.container_material_id -> rgsr.material_profiles.material_id if present (from v8)
+  if exists (select 1 from information_schema.tables where table_schema='rgsr' and table_name='material_profiles') then
+    begin
+      execute 'alter table rgsr.runs
+               add constraint fk_runs_container_material
+               foreign key (container_material_id) references rgsr.material_profiles(material_id) on delete set null';
+    exception when duplicate_object then null;
+    end;
+  end if;
+
+  -- Attach runs structures -> rgsr.geology_structures.structure_id if present (from v8)
+  if exists (select 1 from information_schema.tables where table_schema='rgsr' and table_name='geology_structures') then
+    begin
+      execute 'alter table rgsr.runs
+               add constraint fk_runs_chamber_structure
+               foreign key (chamber_structure_id) references rgsr.geology_structures(structure_id) on delete set null';
+    exception when duplicate_object then null;
+    end;
+
+    begin
+      execute 'alter table rgsr.runs
+               add constraint fk_runs_substrate_structure
+               foreign key (substrate_structure_id) references rgsr.geology_structures(structure_id) on delete set null';
+    exception when duplicate_object then null;
+    end;
+  end if;
+end
+$do$;
+
+-- ------------------------------------------------------------
+-- 6) RLS: STRICT lane gating to prevent leakage
+-- ------------------------------------------------------------
+alter table rgsr.labs enable row level security;
+alter table rgsr.lab_members enable row level security;
+alter table rgsr.runs enable row level security;
+alter table rgsr.run_measurements enable row level security;
+alter table rgsr.run_artifacts enable row level security;
+
+-- Labs: only sys_admin/service can manage; lab members can read their labs (via membership)
+drop policy if exists labs_select on rgsr.labs;
+create policy labs_select on rgsr.labs for select to authenticated
+using (rgsr.can_read_lane(lane, lab_id) or exists (select 1 from rgsr.lab_members m where m.lab_id = labs.lab_id and m.user_id = rgsr.me() and m.is_active = true));
+
+drop policy if exists labs_write on rgsr.labs;
+create policy labs_write on rgsr.labs for all to authenticated
+using (rgsr.can_write())
+with check (rgsr.can_write());
+
+-- Lab members: members can see their own memberships; sys/service can see all
+drop policy if exists lm_select on rgsr.lab_members;
+create policy lm_select on rgsr.lab_members for select to authenticated
+using (user_id = rgsr.me() or rgsr.can_write());
+
+drop policy if exists lm_write on rgsr.lab_members;
+create policy lm_write on rgsr.lab_members for all to authenticated
+using (rgsr.can_write())
+with check (rgsr.can_write());
+
+-- Runs: lane-gated reads; writes governed
+drop policy if exists runs_select on rgsr.runs;
+create policy runs_select on rgsr.runs for select to authenticated
+using (rgsr.can_read_lane(lane, lab_id));
+
+drop policy if exists runs_write on rgsr.runs;
+create policy runs_write on rgsr.runs for all to authenticated
+using (rgsr.can_write())
+with check (rgsr.can_write());
+
+-- Measurements: inherit visibility from parent run (no leakage)
+drop policy if exists rm_select on rgsr.run_measurements;
+create policy rm_select on rgsr.run_measurements for select to authenticated
+using (exists (
+  select 1 from rgsr.runs r
+  where r.run_id = run_measurements.run_id
+    and rgsr.can_read_lane(r.lane, r.lab_id)
+));
+
+drop policy if exists rm_write on rgsr.run_measurements;
+create policy rm_write on rgsr.run_measurements for all to authenticated
+using (rgsr.can_write())
+with check (rgsr.can_write());
+
+-- Artifacts: inherit visibility from parent run (no leakage)
+drop policy if exists ra_select on rgsr.run_artifacts;
+create policy ra_select on rgsr.run_artifacts for select to authenticated
+using (exists (
+  select 1 from rgsr.runs r
+  where r.run_id = run_artifacts.run_id
+    and rgsr.can_read_lane(r.lane, r.lab_id)
+));
+
+drop policy if exists ra_write on rgsr.run_artifacts;
+create policy ra_write on rgsr.run_artifacts for all to authenticated
+using (rgsr.can_write())
+with check (rgsr.can_write());
+
+commit;
+-- ============================================================
+-- End migration
+-- ============================================================
