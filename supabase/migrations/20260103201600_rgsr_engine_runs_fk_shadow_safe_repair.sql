@@ -1,4 +1,4 @@
-﻿-- 20260103201600_rgsr_engine_runs_fk_shadow_safe_repair.sql
+-- 20260103201600_rgsr_engine_runs_fk_shadow_safe_repair.sql
 -- Local/shadow-safe: ensure rgsr.engine_runs has a config reference and a valid FK to rgsr.engine_configs(config_id).
 -- Strategy:
 --  - If engine_runs.engine_config_id exists -> FK it to engine_configs(config_id)

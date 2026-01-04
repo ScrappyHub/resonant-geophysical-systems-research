@@ -1,4 +1,4 @@
-﻿-- 20260103201019_rgsr_admin_uids_seed_local_safe_patch.sql
+-- 20260103201019_rgsr_admin_uids_seed_local_safe_patch.sql
 -- Local + shadow safe: insert only UIDs that actually exist in auth.users.
 
 with u(uid) as (
