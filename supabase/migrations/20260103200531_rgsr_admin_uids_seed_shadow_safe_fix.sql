@@ -1,4 +1,4 @@
-﻿-- 20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql
+-- 20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql
 -- Makes admin UID seeding safe in shadow databases (db pull / shadow apply).
 -- Does NOT remove any existing admin_uids rows; only re-inserts valid ones.
 
