@@ -1,12 +1,12 @@
--- 20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql
+﻿-- 20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql
 -- Makes admin UID seeding safe in shadow databases (db pull / shadow apply).
 -- Does NOT remove any existing admin_uids rows; only re-inserts valid ones.
 
-do \$\$
+do supabase/migrations/20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql
 begin
   raise notice 'RGSR admin_uids shadow-safe seed fix: start';
 end
-\$\$;
+supabase/migrations/20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql;
 
 with u(uid) as (
   values
@@ -22,8 +22,8 @@ from u
 join auth.users au on au.id = u.uid
 on conflict (uid) do nothing;
 
-do \$\$
+do supabase/migrations/20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql
 begin
   raise notice 'RGSR admin_uids shadow-safe seed fix: done';
 end
-\$\$;
+supabase/migrations/20260103200531_rgsr_admin_uids_seed_shadow_safe_fix.sql;
