@@ -1,122 +1,110 @@
-# ENGINE GOVERNANCE — RGSR (FUSION ENGINE)
+# 🧬 CORE ENGINE — RGSR GOVERNANCE (CANONICAL)
 
-Authority Level: Engine Governance (Highest Scrutiny)  
-Engine Role: FUSION_ENGINE  
-Status: ✅ BINDING | ✅ NON-OPTIONAL | 🚨 SPECIAL CONSTRAINTS  
+Engine Key: **RGSR**  
+Authority Level: Engine Governance (Binding)  
+Status: ✅ BINDING | ✅ NON-OPTIONAL  
 
----
+## 1. Authority & Inheritance
 
-## 1. GOVERNANCE INHERITANCE (ABSOLUTE)
-
-RGSR is permanently bound by CORE governance:
+RGSR is permanently bound by CORE platform governance, including:
 
 - CORE_CONSTITUTIONAL_STOP_LAYER.md  
 - CORE_PLATFORM_CONSTITUTION.md  
 - CORE_ENGINE_REGISTRY_AND_VERTICAL_INHERITANCE_LAW.md  
-- CORE_ENGINE_REGISTRY_CONTRACT.md  
 - CORE_GOVERNANCE_INDEX_CHAIN_OF_AUTHORITY.md  
+- CORE_ENGINE_REGISTRY_CONTRACT.md  
 
-RGSR has **no independent authority**.
+RGSR defines computation only.  
+RGSR has no independent authority.
 
----
+## 2. Scope (What RGSR Is)
 
-## 2. ENGINE ROLE (CRITICAL DISTINCTION)
+RGSR is a **correlation/relationship integrator** (coherence mapper) operating on sealed domain artifacts.
 
-RGSR is a **fusion and correlation engine**.
+RGSR may compute:
 
-RGSR:
-- ingests sealed outputs from registered engines
-- computes relationships between domains
-- exposes coupling, coherence, and alignment
+- correlations and cross-correlations  
+- coherence / phase-locking measures  
+- coupling strength estimates  
+- confidence bounds and uncertainty surfaces  
+- provenance-linked summaries referencing inputs by hash  
 
-RGSR DOES NOT:
-- create new physics
-- override engine truth
-- reinterpret outputs
-- generate causal claims
+## 3. Non-Scope (What RGSR Is Not)
 
-Correlation ≠ causation.
+RGSR may NOT:
 
----
+- generate new physics or claim causal mechanisms  
+- reinterpret truth-engine outputs as meaning, intent, or attribution  
+- access sensors/devices directly (CORE orchestrates all I/O)  
+- accept peer-engine direct delivery (CORE-only delivery)  
+- publish outside CORE permissions and audit gates  
+- include user identity, governance state (roles/tiers/flags), or billing signals in outputs or logs  
 
-## 3. PERMITTED INPUTS (STRICT)
+## 4. Determinism & Reproducibility (Hard Requirement)
 
-RGSR may ingest outputs ONLY from:
-- CORE-registered engines
-- sealed artifacts
-- schema-validated payloads
+RGSR runs must be reproducible given:
 
-RGSR MUST NOT:
-- ingest raw sensor data
-- ingest unsealed artifacts
-- ingest user-interpreted data
-- access external feeds
+- sealed upstream artifacts  
+- sealed inputs + parameters  
+- engine version identity  
+- canonical JSON rules used by CORE sealing  
 
----
+Heuristics or probabilistic logic, if present:
 
-## 4. PROHIBITIONS (ENHANCED)
+- MUST be declared  
+- MUST be logged  
+- MUST be made deterministic (fixed seed + sealed parameters) so identical sealed inputs yield identical outputs  
+- may only execute when CORE authorizes the lane for the run context; RGSR does not evaluate lane eligibility  
 
-RGSR MUST NOT:
-- attribute cause, intent, or agency
-- generate threat, medical, or policy conclusions
-- privilege one engine as “dominant truth”
-- access networks
-- publish independently
-- call engines directly
+## 5. Required Artifacts (Minimum Bundle)
 
----
+RGSR must emit, at minimum:
 
-## 5. DETERMINISM & AUDITABILITY
+- ENGINE_MANIFEST.json  
+- RUN_CONDITIONS.json  
+- SHA256SUMS.txt  
+- ARTIFACT_INDEX.json  
+- INPUT_ARTIFACT_INDEX.json (hash-referenced list of all upstream artifacts)  
+- COUPLING_REPORT.json (optional but recommended)  
+- OUTPUT_SUMMARY.json (correlation-only summary; no attribution)  
 
-RGSR outputs MUST be reproducible given:
-- identical sealed inputs
-- identical correlation parameters
-- identical engine version
+All artifacts must be sealable and verifiable.
 
-Heuristics or probabilistic logic:
-- must be declared
-- must be logged
-- must be gated by CORE lane policy
+## 6. Output Semantics (Enforceable)
 
----
+RGSR outputs MUST:
 
-## 6. OUTPUT CONSTRAINTS
+- explicitly state **CORRELATION_ONLY** semantics  
+- label uncertainty when inputs are incomplete  
+- reference upstream artifacts by hash  
+- include `inputs_hash` and `outputs_hash` for replay verification  
+- include an `input_artifact_index` (hash list) for every run  
 
-RGSR outputs:
-- relationships
-- confidence metrics
-- correlation structures
+RGSR must not emit language implying causation, intent, attribution, or operational directives.
 
-RGSR MUST:
-- label uncertainty
-- explicitly state correlation-only semantics
-- reference input artifacts by hash
+## 7. Publishing & Export Rules
 
----
+Export requires:
 
-## 7. CHANGE CONTROL (STRICTEST)
+- sealed run bundle  
+- manifest + schemas included  
+- hashes + artifact index included  
+- replay verification possible without network access  
 
-Any change to:
-- scope
-- permitted inputs
-- output semantics
-- correlation logic
+## 8. Enforcement (CORE Rejection Rules)
 
-REQUIRES:
-- governance review
-- registry update
-- versioned manifest
-- Git audit record
+CORE must reject any RGSR output that:
 
-Unregistered changes invalidate RGSR runs.
+- fails schema validation  
+- lacks inputs_hash / outputs_hash  
+- lacks input_artifact_index  
+- contains forbidden fields (identity/governance/billing)  
+- is not reproducible under replay  
 
----
+## 9. Amendment Rules
 
-## 8. FINAL DECLARATION
+Changes require:
 
-RGSR is a **physics integrator**, not an authority.
-
-It reveals structure.
-It does not decide meaning.
-
-This file permanently constrains RGSR behavior.
+- CORE governance review  
+- engine repo version bump  
+- Git audit trail and registry update
