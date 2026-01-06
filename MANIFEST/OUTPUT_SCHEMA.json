@@ -1,1 +1,35 @@
-
+{
+  "schema_version": "1.0.0",
+  "engine_code": "RGSR",
+  "engine_version": "1.0.0",
+  "required": ["run_id", "engine", "outputs", "metrics", "inputs_hash", "outputs_hash"],
+  "engine": {
+    "engine_code": "RGSR",
+    "engine_version": "1.0.0"
+  },
+  "outputs": {
+    "type": "object",
+    "description": "Relational outputs only (correlation/coherence/coupling/confidence). No raw truth-engine fields."
+  },
+  "metrics": {
+    "type": "object",
+    "description": "Compute metrics (timings, iteration counts) not business metrics"
+  },
+  "inputs_hash": {
+    "type": "string",
+    "description": "sha256 of canonical input JSON text"
+  },
+  "outputs_hash": {
+    "type": "string",
+    "description": "sha256 of canonical output JSON text"
+  },
+  "prohibitions": {
+    "must_not_include": [
+      "user_identity",
+      "governance_state",
+      "billing_state",
+      "cross_engine_private_data",
+      "causal_claims"
+    ]
+  }
+}
