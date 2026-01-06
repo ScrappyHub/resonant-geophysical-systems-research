@@ -1,37 +1,25 @@
-# Planetary Pyramid Network (PPN)
+# RGSR — Unified Multi-Domain Fusion Engine
 
-This workspace is a structured research + build environment for testing the **Planetary Resonance Grid Hypothesis**
-using falsifiable experiments (Phase 1 / Phase 2), sensors, signal processing, and (optional) simulation.
+RGSR is a **fusion engine** in the CORE engine family.
 
-## Folder Map
-- 01_DOCS: Theory, methods, references
-- 02_EXPERIMENTS: Test plans and run logs
-- 03_HARDWARE: BOM, sensor specs, build logs
-- 04_DATA: Raw + processed datasets and metadata
-- 05_ANALYSIS: Notebooks, reports, figures
-- 06_SIMULATION: Optional multiphysics work
-- 07_SOFTWARE: Python tooling + scripts
-- 08_AUTOMATION: PowerShell pipelines (data ingest, run book helpers)
+It computes **correlation, coherence, coupling, and alignment metrics** across outputs produced by other registered engines.  
+RGSR must remain **correlation-only** and must not claim new domain truth.
 
-## Golden Rules
-1) Everything must be testable, measurable, and logged.
-2) Every experiment has: plan → instrumentation → run → analysis → report.
-3) Raw data is immutable (never overwrite RAW).
-4) Reports reference exact dataset + commit hash (if using git).
+## Invariants (Non-Negotiable)
+- Deterministic: ✅
+- Headless: ✅
+- Network access: ❌
+- User-aware: ❌
+- Governance-aware: ❌
+- Side effects: ❌
 
-<!-- PPN_OPERATOR_DOCS_START -->
-## Operator Docs (PPN)
-Entry point: 09_DOCS\CANONICAL\MASTER_INDEX.md
-- Master Index: 09_DOCS\CANONICAL\MASTER_INDEX.md
-- Commands: 09_DOCS\CANONICAL\CANONICAL_COMMANDS.md
-- Playbook: 09_DOCS\CANONICAL\TESTING_PLAYBOOK.md
-- Data Flows: 09_DOCS\CANONICAL\DATA_FLOWS.md
-- Anomalies: 09_DOCS\CANONICAL\ANOMALY_CATALOG.md
-- Glossary: 09_DOCS\CANONICAL\GLOSSARY.md
-<!-- PPN_OPERATOR_DOCS_END -->
+## Contract Surface (for CORE)
+- `/MANIFEST/ENGINE_MANIFEST.json`
+- `/MANIFEST/INPUT_SCHEMA.json`
+- `/MANIFEST/OUTPUT_SCHEMA.json`
+- `/MANIFEST/COUPLING_RULES.json`
+- `/SEALING/SEALING_SPEC.md`
+- `/GOVERNANCE/ENGINE_GOVERNANCE.md`
 
-
-
-
-
-
+## Notes
+RGSR never calls other engines directly. All inputs are mediated by CORE under the engine registry contract.
