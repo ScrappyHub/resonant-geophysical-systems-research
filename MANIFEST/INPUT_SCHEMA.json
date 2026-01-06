@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "engine_code": "RGSR",
+  "engine_version": "1.0.0",
+  "required": ["run_id", "project_id", "inputs", "parameters"],
+  "inputs": {
+    "type": "object",
+    "description": "Engine outputs provided by CORE only (declared inputs from registered engines)."
+  },
+  "parameters": {
+    "type": "object",
+    "description": "Deterministic parameters controlling fusion, correlation, and coupling computations."
+  },
+  "context": {
+    "type": "object",
+    "forbidden_fields": [
+      "user_email",
+      "billing_tier",
+      "role",
+      "permissions",
+      "feature_flags"
+    ]
+  }
+}
