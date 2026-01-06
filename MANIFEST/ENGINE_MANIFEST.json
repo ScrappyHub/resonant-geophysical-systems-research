@@ -3,7 +3,10 @@
   "engine_code": "RGSR",
   "engine_name": "Resonant Geophysical Systems Research Engine",
   "engine_role": "FUSION_ENGINE",
-  "domain": "FUSION_CORRELATION",
+  "domain": {
+    "domain_class": "SIGNAL",
+    "domain_detail": "FUSION_CORRELATION"
+  },
   "engine_version": "1.0.0",
   "invariants": {
     "deterministic": true,
@@ -22,7 +25,18 @@
     "sealing_spec_file": "SEALING/SEALING_SPEC.md",
     "canonical_json": true,
     "hash_algo": "sha256",
-    "hash_canonicalization": "json_text"
+    "hash_canonicalization": "JCS_RFC8785"
+  },
+  "artifact_bundle": {
+    "manifest_files": [
+      "MANIFEST/ENGINE_MANIFEST.json",
+      "MANIFEST/INPUT_SCHEMA.json",
+      "MANIFEST/OUTPUT_SCHEMA.json",
+      "MANIFEST/COUPLING_RULES.json",
+      "SEALING/SEALING_SPEC.md",
+      "GOVERNANCE/ENGINE_GOVERNANCE.md",
+      "CAPABILITIES/PHYSICS_CAPABILITIES.md"
+    ]
   },
   "compatibility": {
     "core_min_version": "1.0.0",
@@ -34,5 +48,5 @@
     ]
   },
   "outputs_are_interpretation": false,
-  "notes": "Correlation-only fusion engine. Must not generate new physics or causal claims."
+  "notes": "Correlation-only fusion engine. Must not generate new physics, causal mechanisms, attribution, intent, or directives."
 }
