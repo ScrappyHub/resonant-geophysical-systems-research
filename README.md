@@ -1,77 +1,24 @@
-# 🧬 CORE ENGINE — RGSR GOVERNANCE (CANONICAL)
+# 🧬 RGSR — Resonant Geophysical Systems Research Engine
 
-File: `verticals/rgsr/CORE_RGSR_ENGINE_GOVERNANCE.md`  
-Engine Key: **RGSR**  
-Engine Role: **FUSION_ENGINE**  
-Authority Level: Engine Governance (Binding)  
-Status: ✅ BINDING | ✅ NON-OPTIONAL | ✅ SPECIAL CONSTRAINTS APPLY  
+RGSR is a **multi-domain fusion engine** within the CORE Engine Family.
+
+RGSR performs **cross-engine correlation**, not primary physics simulation.
 
 ---
 
-## 1. Authority & Inheritance (Absolute)
+## Engine Role
 
-RGSR is permanently bound by CORE platform governance, including:
+**Engine Type:** FUSION_ENGINE  
+**Domain:** Cross-domain resonance & correlation  
+**Governance Owner:** CORE Platform  
+**Execution Context:** CORE-orchestrated only
 
-- CORE_CONSTITUTIONAL_STOP_LAYER.md  
-- CORE_PLATFORM_CONSTITUTION.md  
-- CORE_ENGINE_REGISTRY_AND_VERTICAL_INHERITANCE_LAW.md  
-- CORE_GOVERNANCE_INDEX_CHAIN_OF_AUTHORITY.md  
-- CORE_ENGINE_REGISTRY_CONTRACT.md  
-
-RGSR defines **cross-domain correlation only**.
-
-RGSR **does not create new physics**.
+RGSR ingests sealed outputs from registered engines and computes relationships
+between domains.
 
 ---
 
-## 2. Engine Role Clarification (Critical)
-
-RGSR is a **fusion and correlation engine**, not a primary truth generator.
-
-RGSR:
-- ingests sealed outputs from registered truth engines
-- aligns, correlates, and compares them
-- exposes coupling, coherence, and cross-domain relationships
-
-RGSR **MUST NOT**:
-- invent new physical quantities
-- simulate physics already owned by a domain engine
-- override or reinterpret raw engine outputs
-- emit causal claims beyond correlation
-
-> RGSR answers **“how domains relate”**, not **“what the physics is.”**
-
----
-
-## 3. Permitted Inputs (Strict)
-
-RGSR may ingest outputs **only** from CORE-registered engines:
-
-- ARES  
-- HYDRA  
-- THERMOS  
-- MAGNETAR  
-- LITHOS  
-- ATMOS  
-- KINETIC  
-- CRYSTAL  
-- SIGNAL  
-
-All inputs MUST:
-- be sealed
-- include verified hashes
-- include engine_code + engine_version
-- conform to registered OUTPUT_SCHEMA.json
-
-RGSR MUST NOT accept:
-- raw sensor data
-- unsealed artifacts
-- user-provided interpreted data
-- external data feeds
-
----
-
-## 4. Scope (What RGSR Is)
+## What RGSR Computes
 
 RGSR computes:
 
@@ -79,117 +26,66 @@ RGSR computes:
 - coherence and phase alignment
 - resonance overlap and coupling strength
 - temporal alignment and lag relationships
-- anomaly concurrence across engines
+- multi-engine anomaly concurrence
 - confidence and consistency metrics
 
-RGSR outputs are **relational**, never absolute truth.
+RGSR **does not create new physics**.
 
 ---
 
-## 5. Non-Scope (What RGSR Is Not)
+## What RGSR Does NOT Do
 
-RGSR MUST NOT:
+RGSR does NOT:
 
-- replace any domain engine
-- generate standalone physical fields
-- attribute cause, intent, or agency
-- generate threat classification
-- generate medical, military, or policy conclusions
-- access network resources
-- call other engines directly
-- publish outside CORE permissions
+- generate raw physics fields
+- override or reinterpret engine truth
+- accept raw sensor data
+- infer causation or attribution
+- produce policy, medical, or defense conclusions
+- publish independently
+- call engines directly
 
----
-
-## 6. Determinism & Reproducibility
-
-RGSR runs MUST be reproducible given:
-
-- identical sealed input artifacts
-- identical correlation parameters
-- identical engine release identity
-
-If stochastic or heuristic methods are introduced:
-- they MUST be declared in ENGINE_MANIFEST.json
-- they MUST be logged in RUN_CONDITIONS.json
-- they MUST be disabled by default unless a lane explicitly permits them
+RGSR outputs are **relational only**.
 
 ---
 
-## 7. Required Artifacts (Minimum Sealed Bundle)
+## Determinism & Reproducibility
 
-RGSR MUST emit a sealed bundle including:
+RGSR runs are reproducible given identical:
 
-- `ENGINE_MANIFEST.json`
-- `RUN_CONDITIONS.json`
-- `INPUT_INDEX.json` (list of all input artifacts + hashes)
-- `OUTPUT_CANONICAL.json`
-- `SHA256SUMS.txt`
-- `ARTIFACT_INDEX.json`
+- sealed input artifacts
+- correlation parameters
+- engine version
 
-Recommended domain artifacts:
-- `COUPLING_MATRIX.json`
-- `COHERENCE_MAP.json`
-- `PHASE_ALIGNMENT.json`
-- `ANOMALY_OVERLAP.json`
-- `CONFIDENCE_METRICS.json`
-
-RGSR MUST NOT emit raw engine data; only references + derived correlations.
+Heuristic or stochastic methods must be declared and gated by CORE.
 
 ---
 
-## 8. Safety & Misuse Controls (Enhanced)
+## Inputs & Outputs
 
-RGSR MUST:
+Inputs:
+- sealed outputs from CORE-registered engines only
 
-- clearly label correlation vs causation
-- include confidence and uncertainty metrics
-- prohibit “root cause” language in outputs
-- prohibit predictive claims unless routed through governed lenses
-- prohibit single-domain dominance bias
+Outputs:
+- correlation matrices
+- coherence maps
+- coupling metrics
+- confidence indicators
 
-RGSR outputs MUST be framed as:
-> “Observed cross-domain relationships under stated conditions.”
-
----
-
-## 9. Publishing & Export Rules
-
-RGSR has **no independent publishing authority**.
-
-Export is permitted only when:
-- all input artifacts are sealed and verified
-- RGSR output is sealed
-- manifest + schemas are included
-- CORE lane policy explicitly authorizes export
-
-Restricted lanes (defense, medical, security) require additional governance approval.
+RGSR never emits raw engine data — only references and derived relations.
 
 ---
 
-## 10. Amendment Rules (Highest Scrutiny)
+## Governance
 
-Any change to:
-- RGSR scope
-- permitted inputs
-- output semantics
-- determinism guarantees
-- correlation methods
+RGSR operates under enhanced constraints defined by CORE governance law.
 
-REQUIRES:
-- governance review
-- registry update
-- versioned manifest
-- Git audit record
-
-Unreviewed changes invalidate RGSR runs.
+All outputs are interpretive and must be framed as correlations.
 
 ---
 
-## 11. Final Constraint Declaration
+## License & Use
 
-RGSR is a **physics integrator**, not a simulator.  
-RGSR is a **correlation system**, not an authority.  
-RGSR exists to reveal structure — not to decide meaning.
+RGSR is a governed scientific fusion engine.
 
-Once committed, this file is **locked engine governance**.
+Ungoverned or standalone use is unsupported.
