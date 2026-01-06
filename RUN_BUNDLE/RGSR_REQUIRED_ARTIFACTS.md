@@ -1,5 +1,6 @@
 # 📦 RGSR — REQUIRED RUN ARTIFACTS (CANONICAL V1)
 
+This document is an addendum to ScrappyHub/Core-platform/GOVERNANCE/RUN_BUNDLE_SPEC.md.
 Authority Level: Engine Repo Spec (Binding declaration; enforced by CORE Runtime)
 Status: ✅ LOCKED | ✅ BINDING | ✅ NON-OPTIONAL
 
