@@ -1,25 +1,21 @@
-# RGSR REQUIRED ARTIFACTS (Canonical V1)
+# 📦 RGSR — REQUIRED RUN ARTIFACTS (CANONICAL V1)
 
-RGSR is a fusion engine. It must always emit and preserve upstream provenance.
+Authority Level: Engine Repo Spec (Binding declaration; enforced by CORE Runtime)
+Status: ✅ LOCKED | ✅ BINDING | ✅ NON-OPTIONAL
 
-## Required (in addition to standard RUN_BUNDLE spec)
+## Required (In Addition to core-platform/GOVERNANCE/RUN_BUNDLE_SPEC.md)
+RGSR runs MUST include:
+- INPUT_ARTIFACT_INDEX.json (non-empty; hash-referenced upstream artifacts)
 
-### Required Provenance Artifact
-- `INPUT_ARTIFACT_INDEX.json`
+## Output Requirements
+RGSR RUN_OUTPUT.json MUST:
+- declare semantics = CORRELATION_ONLY
+- include input_artifact_index (non-empty)
+- reference upstream artifacts by SHA-256 hash
+- prohibit causal, intent, attribution, or agency language
 
-This file must list **all upstream artifacts** used by RGSR for the run, each with:
-- engine_code
-- artifact_name
-- sha256
-
-## Required Output Fields (RUN_OUTPUT.json)
-- semantics = CORRELATION_ONLY
-- inputs_hash
-- outputs_hash
-- input_artifact_index (array; same content class as INPUT_ARTIFACT_INDEX.json)
-
-## Prohibitions
-RGSR output must not include:
-- causal claims
-- attribution labels (missile/rocket/submarine intent language)
-- identity/governance/billing fields
+## Replay Rule
+A RGSR run is replayable only if:
+- upstream referenced artifacts exist
+- hashes match SHA256SUMS.txt
+- RGSR output replays byte-identically under JCS (RFC 8785)
