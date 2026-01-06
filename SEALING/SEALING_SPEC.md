@@ -1,20 +1,22 @@
 # ENGINE SEALING SPEC (CANONICAL)
 
 ## Purpose
-This engine must emit deterministic, reproducible artifacts that CORE can seal and verify.
+RGSR must emit deterministic correlation artifacts that CORE can seal and verify.
 
 ## Canonical Output Rules
 1. Output MUST be valid UTF-8 JSON.
-2. Output MUST be deterministic under identical inputs + parameters + engine version.
+2. Output MUST be deterministic under identical sealed inputs + parameters + engine version.
 3. Output MUST NOT include:
    - user identity
    - governance state (roles, tiers, feature flags)
    - billing/monetization signals
+   - causal or attribution claims
 4. Output MUST include:
    - run_id
    - engine_code + engine_version
    - inputs_hash (sha256 of canonical input JSON text)
    - outputs_hash (sha256 of canonical output JSON text)
+   - input_artifact_index (hash-referenced list of all upstream artifacts)
 
 ## Hashing
 - Hash algorithm: SHA-256
@@ -23,10 +25,10 @@ This engine must emit deterministic, reproducible artifacts that CORE can seal a
 
 ## What CORE seals
 CORE seals:
-- ENGINE_MANIFEST.json (definition)
-- INPUT_SCHEMA.json / OUTPUT_SCHEMA.json
-- Run input payload (RUN_INPUT)
-- Run output payload (RUN_OUTPUT)
-- Run metadata (RUN_META)
+- ENGINE_MANIFEST.json
+- schemas + coupling rules
+- upstream artifact hashes
+- run input/output payloads
+- run metadata
 
-Engines do not modify sealed artifacts after emission.
+RGSR does not modify sealed artifacts after emission.
