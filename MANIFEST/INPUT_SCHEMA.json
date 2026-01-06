@@ -5,11 +5,11 @@
   "required": ["run_id", "project_id", "inputs", "parameters"],
   "inputs": {
     "type": "object",
-    "description": "Engine outputs provided by CORE only (declared inputs from registered engines)."
+    "description": "Sealed engine outputs provided by CORE only"
   },
   "parameters": {
     "type": "object",
-    "description": "Deterministic parameters controlling fusion, correlation, and coupling computations."
+    "description": "Deterministic parameters for correlation and fusion"
   },
   "context": {
     "type": "object",
