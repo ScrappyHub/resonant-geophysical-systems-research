@@ -1,9 +1,9 @@
 {
   "manifest_version": "1.0.0",
   "engine_code": "RGSR",
-  "engine_name": "Unified Multi-Domain Fusion Engine",
+  "engine_name": "Resonant Geophysical Systems Research Engine",
   "engine_role": "FUSION_ENGINE",
-  "domain": "MULTI_DOMAIN_FUSION",
+  "domain": "FUSION_CORRELATION",
   "engine_version": "1.0.0",
   "invariants": {
     "deterministic": true,
@@ -34,5 +34,5 @@
     ]
   },
   "outputs_are_interpretation": false,
-  "notes": "Correlation-only; must not generate new physics. Consumes declared engine outputs only; produces fusion/coupling metrics without inventing domain truth."
+  "notes": "Correlation-only fusion engine. Must not generate new physics or causal claims."
 }
