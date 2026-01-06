@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "engine_code": "RGSR",
+  "engine_version": "1.0.0",
+  "allowed_inputs_from_other_engines": [
+    { "engine_code": "ARES", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "HYDRA", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "THERMOS", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "MAGNETAR", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "LITHOS", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "ATMOS", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "KINETIC", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "CRYSTAL", "via": "CORE_MEDIATED_CONTRACT" },
+    { "engine_code": "SIGNAL", "via": "CORE_MEDIATED_CONTRACT" }
+  ],
+  "allowed_outputs_to_other_engines": [],
+  "direct_engine_to_engine_calls": false
+}
