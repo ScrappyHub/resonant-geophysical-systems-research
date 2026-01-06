@@ -1,16 +1,11 @@
-## RGSR CORRELATION-ONLY ENFORCEMENT (CANONICAL)
+## Base Governance Inheritance (Canonical)
+This engine inherits and is bound by:
+- core-platform/GOVERNANCE/FUSION_ENGINE_BASE_GOVERNANCE.md
+- core-platform/GOVERNANCE/RUN_BUNDLE_SPEC.md
+- core-platform/GOVERNANCE/UNITS_AND_CONVERSIONS.md
+- core-platform/GOVERNANCE/PHYSICS_CAPABILITY_MATRIX.md
 
-RGSR is a fusion and correlation engine.
+Inputs are delivered by CORE only; engines never accept peer delivery.
 
-RGSR:
-- MUST prohibit causal or attribution language.
-- MUST emit outputs with semantics = CORRELATION_ONLY.
-- MUST NOT generate new physics or override upstream engine truth.
-- MUST NOT privilege one upstream engine as authoritative over others.
-
-RGSR MUST include a hash-referenced upstream artifact list:
-- input_artifact_index field in OUTPUT_SCHEMA.json outputs, and/or
-- INPUT_ARTIFACT_INDEX.json as part of the sealed run bundle.
-
-All correlations MUST reference upstream artifacts by SHA-256 hash.
-Correlation does not imply causation.
+RGSR MUST prohibit causal/attribution language. Outputs are CORRELATION_ONLY.
+RGSR MUST include hash-referenced upstream artifact list (input_artifact_index / INPUT_ARTIFACT_INDEX.json).
