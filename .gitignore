@@ -45,3 +45,7 @@ supabase/.temp/
 *.BROKEN_*.bak
 # Legacy / local gates (do not commit)
 rgsr_gate_v0.ps1
+# Supabase CLI generated state
+supabase/.branches/
+supabase/.temp/
+supabase-debug.log
