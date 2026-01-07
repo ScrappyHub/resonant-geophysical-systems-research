@@ -49,3 +49,20 @@ rgsr_gate_v0.ps1
 supabase/.branches/
 supabase/.temp/
 supabase-debug.log
+
+# === ROOTED: Supabase local CLI junk (never commit) ===
+supabase/.temp/
+supabase/.temp/**
+supabase/.cache/
+supabase/.cache/**
+supabase/.branches/
+supabase/.branches/**
+supabase/.realtime/
+supabase/.realtime/**
+supabase/.gitignore
+supabase/status.txt
+supabase-debug*.log
+
+# === ROOTED: local debug logs ===
+reset_debug.log
+supabase-debug.start.log
