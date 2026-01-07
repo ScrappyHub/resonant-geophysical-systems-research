@@ -75,3 +75,7 @@ rgsr.step_engine_run_2d.pgdef.sql
 # === ROOTED: local secrets / status (never commit) ===
 supabase.local.keys.psd1
 supabase.status.txt
+
+# local scratch (never commit)
+_local/
+
