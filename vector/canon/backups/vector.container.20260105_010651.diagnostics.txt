@@ -1,0 +1,19 @@
+﻿=== docker ps (filtered) ===
+482f0866eaca  supabase_studio_Plantery_Pyramid_Network  public.ecr.aws/supabase/studio:2025.12.09-sha-434634f  Up 3 hours (healthy)
+5a3a1be0f5fe  supabase_pg_meta_Plantery_Pyramid_Network  public.ecr.aws/supabase/postgres-meta:v0.95.1  Up 3 hours (healthy)
+3682b05883e7  supabase_edge_runtime_Plantery_Pyramid_Network  public.ecr.aws/supabase/edge-runtime:v1.69.28  Up 3 hours
+b41f3e2adbcc  supabase_storage_Plantery_Pyramid_Network  public.ecr.aws/supabase/storage-api:v1.33.0  Up 3 hours (healthy)
+18135e6e4347  supabase_rest_Plantery_Pyramid_Network  public.ecr.aws/supabase/postgrest:v14.1  Up 3 hours
+e32cdccd32e9  supabase_realtime_Plantery_Pyramid_Network  public.ecr.aws/supabase/realtime:v2.68.4  Up 3 hours (healthy)
+2212c8a4fb31  supabase_inbucket_Plantery_Pyramid_Network  public.ecr.aws/supabase/mailpit:v1.22.3  Up 3 hours (healthy)
+889d6ce4d8bc  supabase_auth_Plantery_Pyramid_Network  public.ecr.aws/supabase/gotrue:v2.184.0  Up 3 hours (healthy)
+e9cc68c4256a  supabase_kong_Plantery_Pyramid_Network  public.ecr.aws/supabase/kong:2.8.1  Up 3 hours (healthy)
+c70f63b20ff1  supabase_vector_Plantery_Pyramid_Network  public.ecr.aws/supabase/vector:0.28.1-alpine  Up About an hour (healthy)
+bacb6575bb6c  supabase_analytics_Plantery_Pyramid_Network  public.ecr.aws/supabase/logflare:1.27.0  Up 3 hours (healthy)
+f92d50ba5adb  supabase_db_Plantery_Pyramid_Network  public.ecr.aws/supabase/postgres:17.6.1.064  Up 3 hours (healthy)
+807a8d22fc32  thirsty_bouman  c050ca8e1d4e  Up 5 hours
+e01e29efece4  intelligent_wozniak  c050ca8e1d4e  Up 5 hours
+c96f9c8f1f95  elastic_bouman  c050ca8e1d4e  Up 5 hours
+3e7c69f17e43  wonderful_murdock  c050ca8e1d4e  Up 9 hours
+
+=== docker logs (tail 200) for vector container c70f63b20ff1 ===

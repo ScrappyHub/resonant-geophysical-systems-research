@@ -1,0 +1,44 @@
+﻿=== VECTOR AUDIT 20260105_011502 ===
+Container: c70f63b20ff1
+
+--- vector validate ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_functions"
+------------------------------------------------
+                                       Validated
+
+
+--- checks ---
+has sinks.unmatched_file = 
+has input '- router._unmatched' = 
+router transform type (best-effort) = unknown
+
+--- vector validate AFTER FIX ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_auth"
+------------------------------------------------
+                                       Validated
+
+
+--- health ---
+{"ok":true}

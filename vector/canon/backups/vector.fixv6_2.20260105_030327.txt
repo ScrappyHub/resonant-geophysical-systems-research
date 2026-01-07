@@ -1,0 +1,49 @@
+﻿=== FIX V6.2 AUDIT 20260105_030327 ===
+Container: c70f63b20ff1
+
+--- ps vector (awk) ---
+
+
+[WARN] Could not detect vector process line; defaulting to /etc/vector/vector.yaml
+
+[CANON] configTarget = /etc/vector/vector.yaml
+
+--- validate BEFORE (target) ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_rest"
+------------------------------------------------
+                                       Validated
+
+
+Offenders: router._unmatched
+Backup: M:\Plantery Pyramid Network\vector\canon\backups\vector.before_fixv6_2.20260105_030327.yaml
+
+--- validate AFTER (target) ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_kong"
+------------------------------------------------
+                                       Validated
+
+
+--- health ---
+{"ok":true}

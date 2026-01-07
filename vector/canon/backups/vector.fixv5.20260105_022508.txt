@@ -1,0 +1,261 @@
+﻿=== FIX V5 AUDIT 20260105_022508 ===
+Container: c70f63b20ff1
+Backup: M:\Plantery Pyramid Network\vector\canon\backups\vector.fixv5.20260105_022508.before.yaml
+
+--- validate BEFORE ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_storage"
+------------------------------------------------
+                                       Validated
+
+
+Offenders: router._unmatched
+
+--- vector --help ---
+Usage: vector [OPTIONS] [COMMAND]
+
+Commands:
+  validate
+          Validate the target config, then exit
+  generate
+          Generate a Vector configuration containing a list of components
+  generate-schema
+          Generate the configuration schema for this version of Vector. (experimental)
+  list
+          List available components, then exit
+  test
+          Run Vector config unit tests, then exit. This command is experimental and therefore
+          subject to change. For guidance on how to write unit tests check out
+          <https://vector.dev/guides/level-up/unit-testing/>
+  graph
+          Output the topology as visual representation using the DOT language which can be rendered
+          by GraphViz
+  top
+          Display topology and metrics in the console, for a local or remote Vector instance
+  tap
+          Observe output log events from source or transform components. Logs are sampled at a
+          specified interval
+  vrl
+          Vector Remap Language CLI
+  help
+          Print this message or the help of the given subcommand(s)
+
+Options:
+  -c, --config <config>
+          Read configuration from one or more files. Wildcard paths are supported. File format is
+          detected from the file name. If zero files are specified the default config path
+          `/etc/vector/vector.toml` will be targeted
+          
+          [env: VECTOR_CONFIG=]
+
+  -C, --config-dir <config-dir>
+          Read configuration from files in one or more directories. File format is detected from the
+          file name.
+          
+          Files not ending in .toml, .json, .yaml, or .yml will be ignored.
+          
+          [env: VECTOR_CONFIG_DIR=]
+
+      --config-toml <config-toml>
+          Read configuration from one or more files. Wildcard paths are supported. TOML file format
+          is expected
+          
+          [env: VECTOR_CONFIG_TOML=]
+
+      --config-json <config-json>
+          Read configuration from one or more files. Wildcard paths are supported. JSON file format
+          is expected
+          
+          [env: VECTOR_CONFIG_JSON=]
+
+      --config-yaml <config-yaml>
+          Read configuration from one or more files. Wildcard paths are supported. YAML file format
+          is expected
+          
+          [env: VECTOR_CONFIG_YAML=]
+
+  -r, --require-healthy <REQUIRE_HEALTHY>
+          Exit on startup if any sinks fail healthchecks
+          
+          [env: VECTOR_REQUIRE_HEALTHY=]
+          [possible values: true, false]
+
+  -t, --threads <THREADS>
+          Number of threads to use for processing (default is number of available cores)
+          
+          [env: VECTOR_THREADS=]
+
+  -v, --verbose...
+          Enable more detailed internal logging. Repeat to increase level. Overridden by `--quiet`
+
+  -q, --quiet...
+          Reduce detail of internal logging. Repeat to reduce further. Overrides `--verbose`
+
+      --log-format <LOG_FORMAT>
+          Set the logging format
+          
+          [env: VECTOR_LOG_FORMAT=]
+          [default: text]
+          [possible values: text, json]
+
+      --color <COLOR>
+          Control when ANSI terminal formatting is used.
+          
+          By default `vector` will try and detect if `stdout` is a terminal, if it is ANSI will be
+          enabled. Otherwise it will be disabled. By providing this flag with the `--color always`
+          option will always enable ANSI terminal formatting. `--color never` will disable all ANSI
+          terminal formatting. `--color auto` will attempt to detect it automatically.
+          
+          [env: VECTOR_COLOR=]
+          [default: auto]
+          [possible values: auto, always, never]
+
+  -w, --watch-config
+          Watch for changes in configuration file, and reload accordingly
+          
+          [env: VECTOR_WATCH_CONFIG=]
+
+  -i, --internal-log-rate-limit <INTERNAL_LOG_RATE_LIMIT>
+          Set the internal log rate limit
+          
+          [env: VECTOR_INTERNAL_LOG_RATE_LIMIT=]
+          [default: 10]
+
+      --allocation-tracing
+          Set runtime allocation tracing
+          
+          [env: ALLOCATION_TRACING=]
+
+      --allocation-tracing-reporting-interval-ms <ALLOCATION_TRACING_REPORTING_INTERVAL_MS>
+          Set allocation tracing reporting rate in milliseconds
+          
+          [env: ALLOCATION_TRACING_REPORTING_INTERVAL_MS=]
+          [default: 5000]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+
+--- probe: vector config --help ---
+Output a provided Vector configuration file/dir as a single JSON object, useful for checking in to
+version control
+
+Usage: vector config [OPTIONS]
+
+Options:
+  -p, --pretty
+          Pretty print JSON
+
+  -i, --include-defaults
+          Include default values where missing from config
+
+  -c, --config <config>
+          Read configuration from one or more files. Wildcard paths are supported. File format is
+          detected from the file name. If zero files are specified the default config path
+          `/etc/vector/vector.toml` will be targeted
+          
+          [env: VECTOR_CONFIG=]
+
+      --config-toml <config-toml>
+          Vector config files in TOML format
+
+      --config-json <config-json>
+          Vector config files in JSON format
+
+      --config-yaml <config-yaml>
+          Vector config files in YAML format
+
+  -C, --config-dir <config-dir>
+          Read configuration from files in one or more directories. File format is detected from the
+          file name.
+          
+          Files not ending in .toml, .json, .yaml, or .yml will be ignored.
+          
+          [env: VECTOR_CONFIG_DIR=]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+
+--- probe: vector generate --help ---
+Generate a Vector configuration containing a list of components
+
+Usage: vector generate [OPTIONS] <EXPRESSION>
+
+Arguments:
+  <EXPRESSION>
+          Generate expression, e.g. 'stdin/remap,filter/console'
+          
+          Three comma-separated lists of sources, transforms and sinks, divided by forward slashes.
+          If subsequent component types are not needed then their dividers can be omitted from the
+          expression.
+          
+          For example:
+          
+          `/filter` prints a `filter` transform.
+          
+          `//file,http` prints a `file` and `http` sink.
+          
+          `stdin//http` prints a `stdin` source and an `http` sink.
+          
+          Generated components are given incremental names (`source1`, `source2`, etc) which should
+          be replaced in order to provide better context. You can optionally specify the names of
+          components by prefixing them with `<name>:`, e.g.:
+          
+          `foo:stdin/bar:test_basic/baz:http` prints a `stdin` source called `foo`, a `test_basic`
+          transform called `bar`, and an `http` sink called `baz`.
+          
+          Vector makes a best attempt at constructing a sensible topology. The first transform
+          generated will consume from all sources and subsequent transforms will consume from their
+          predecessor. All sinks will consume from the last transform or, if none are specified,
+          from all sources. It is then up to you to restructure the `inputs` of each component to
+          build the topology you need.
+
+Options:
+  -f, --fragment
+          Whether to skip the generation of global fields
+
+      --file <FILE>
+          Generate config as a file
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+
+[WARN] Could not obtain compiled config via vector config*. Proceeding without it.
+
+--- validate AFTER ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_realtime"
+------------------------------------------------
+                                       Validated
+
+
+--- health ---
+{"ok":true}
+
+--- sha256 ---
+64ec6ee5ad0bf8bffc9b0ecca395793cafb77581a25f3c751d4f49019ddd0fd0

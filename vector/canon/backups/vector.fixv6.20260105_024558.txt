@@ -1,0 +1,331 @@
+﻿=== FIX V6 AUDIT 20260105_024558 ===
+Container: c70f63b20ff1
+
+--- docker inspect ---
+[
+    {
+        "Id": "c70f63b20ff149ea566eb2e06953a9b97e58ba7373e1bea87fb95814ed1ed04a",
+        "Created": "2026-01-05T02:39:49.07554467Z",
+        "Path": "sh",
+        "Args": [
+            "-c",
+            "cat \u003c\u003c'EOF' \u003e /etc/vector/vector.yaml \u0026\u0026 vector --config /etc/vector/vector.yaml\napi:\n  enabled: true\n  address: 0.0.0.0:9001\n\nsources:\n  docker_host:\n    type: docker_logs\n    exclude_containers:\n      - \"supabase_vector_Plantery_Pyramid_Network\"\n\ntransforms:\n  project_logs:\n    type: remap\n    inputs:\n      - docker_host\n    source: |-\n      .project = \"default\"\n      .event_message = del(.message)\n      .appname = del(.container_name)\n      del(.container_created_at)\n      del(.container_id)\n      del(.source_type)\n      del(.stream)\n      del(.label)\n      del(.image)\n      del(.host)\n      del(.stream)\n  router:\n    type: route\n    inputs:\n      - project_logs\n    route:\n      kong: '.appname == \"supabase_kong_Plantery_Pyramid_Network\"'\n      auth: '.appname == \"supabase_auth_Plantery_Pyramid_Network\"'\n      rest: '.appname == \"supabase_rest_Plantery_Pyramid_Network\"'\n      realtime: '.appname == \"supabase_realtime_Plantery_Pyramid_Network\"'\n      storage: '.appname == \"supabase_storage_Plantery_Pyramid_Network\"'\n      functions: '.appname == \"supabase_edge_runtime_Plantery_Pyramid_Network\"'\n      db: '.appname == \"supabase_db_Plantery_Pyramid_Network\"'\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_logs:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      req, err = parse_nginx_log(.event_message, \"combined\")\n      if err == null {\n          .timestamp = req.timestamp\n          .metadata.request.headers.referer = req.referer\n          .metadata.request.headers.user_agent = req.agent\n          .metadata.request.headers.cf_connecting_ip = req.client\n          .metadata.request.method = req.method\n          .metadata.request.path = req.path\n          .metadata.request.protocol = req.protocol\n          .metadata.response.status_code = req.status\n      }\n      if err != null {\n        abort\n      }\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_err:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      .metadata.request.method = \"GET\"\n      .metadata.response.status_code = 200\n      parsed, err = parse_nginx_log(.event_message, \"error\")\n      if err == null {\n          .timestamp = parsed.timestamp\n          .severity = parsed.severity\n          .metadata.request.host = parsed.host\n          .metadata.request.headers.cf_connecting_ip = parsed.client\n          url, err = split(parsed.request, \" \")\n          if err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Gotrue logs are structured json strings which frontend parses directly. But we keep metadata for consistency.\n  auth_logs:\n    type: remap\n    inputs:\n      - router.auth\n    source: |-\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .metadata.timestamp = parsed.time\n          .metadata = merge!(.metadata, parsed)\n      }\n  # PostgREST logs are structured so we separate timestamp from message using regex\n  rest_logs:\n    type: remap\n    inputs:\n      - router.rest\n    source: |-\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e.*): (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .timestamp = to_timestamp!(parsed.time)\n          .metadata.host = .project\n      }\n  # Realtime logs are structured so we parse the severity level using regex (ignore time because it has no date)\n  realtime_logs:\n    type: remap\n    inputs:\n      - router.realtime\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.external_id = .metadata.project\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e\\d+:\\d+:\\d+\\.\\d+) \\[(?P\u003clevel\u003e\\w+)\\] (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n      }\n  # Function logs are unstructured messages on stderr\n  functions_logs:\n    type: remap\n    inputs:\n      - router.functions\n    source: |-\n      .metadata.project_ref = del(.project)\n  # Storage logs may contain json objects so we parse them for completeness\n  storage_logs:\n    type: remap\n    inputs:\n      - router.storage\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.tenantId = .metadata.project\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n          .metadata.timestamp = parsed.time\n          .metadata.context[0].host = parsed.hostname\n          .metadata.context[0].pid = parsed.pid\n      }\n  # Postgres logs some messages to stderr which we map to warning severity level\n  db_logs:\n    type: remap\n    inputs:\n      - router.db\n    source: |-\n      .metadata.host = \"db-default\"\n      .metadata.parsed.timestamp = .timestamp\n\n      parsed, err = parse_regex(.event_message, r'.*(?P\u003clevel\u003eINFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC?):.*', numeric_groups: true)\n\n      if err != null || parsed == null {\n        .metadata.parsed.error_severity = \"info\"\n      }\n      if parsed != null {\n       .metadata.parsed.error_severity = parsed.level\n      }\n      if .metadata.parsed.error_severity == \"info\" {\n          .metadata.parsed.error_severity = \"log\"\n      }\n      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)\n\nsinks:\n  logflare_auth:\n    type: \"http\"\n    inputs:\n      - auth_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=gotrue.logs.prod\"\n  logflare_realtime:\n    type: \"http\"\n    inputs:\n      - realtime_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=realtime.logs.prod\"\n  logflare_rest:\n    type: \"http\"\n    inputs:\n      - rest_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgREST.logs.prod\"\n  logflare_db:\n    type: \"http\"\n    inputs:\n      - db_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgres.logs\"\n  logflare_functions:\n    type: \"http\"\n    inputs:\n      - functions_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=deno-relay-logs\"\n  logflare_storage:\n    type: \"http\"\n    inputs:\n      - storage_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=storage.logs.prod.2\"\n  logflare_kong:\n    type: \"http\"\n    inputs:\n      - kong_logs\n      - kong_err\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=cloudflare.logs.prod\"\n\nEOF\n"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 833974,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-01-05T07:25:13.972116373Z",
+            "FinishedAt": "2026-01-05T07:25:13.78114237Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-01-05T07:45:07.871520625Z",
+                        "End": "2026-01-05T07:45:07.931276553Z",
+                        "ExitCode": 0,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nremote file exists\n"
+                    },
+                    {
+                        "Start": "2026-01-05T07:45:20.831075468Z",
+                        "End": "2026-01-05T07:45:20.877134153Z",
+                        "ExitCode": 0,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nremote file exists\n"
+                    },
+                    {
+                        "Start": "2026-01-05T07:45:30.878493466Z",
+                        "End": "2026-01-05T07:45:30.92900035Z",
+                        "ExitCode": 0,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nremote file exists\n"
+                    },
+                    {
+                        "Start": "2026-01-05T07:45:40.929976312Z",
+                        "End": "2026-01-05T07:45:40.977554234Z",
+                        "ExitCode": 0,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nremote file exists\n"
+                    },
+                    {
+                        "Start": "2026-01-05T07:45:53.811133827Z",
+                        "End": "2026-01-05T07:45:53.86676436Z",
+                        "ExitCode": 0,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nremote file exists\n"
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:4bc04aca94a44f04b427a490f346e7397ef7ce61fe589d718f744f7d92cb5c80",
+        "ResolvConfPath": "/var/lib/docker/containers/c70f63b20ff149ea566eb2e06953a9b97e58ba7373e1bea87fb95814ed1ed04a/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/c70f63b20ff149ea566eb2e06953a9b97e58ba7373e1bea87fb95814ed1ed04a/hostname",
+        "HostsPath": "/var/lib/docker/containers/c70f63b20ff149ea566eb2e06953a9b97e58ba7373e1bea87fb95814ed1ed04a/hosts",
+        "LogPath": "/var/lib/docker/containers/c70f63b20ff149ea566eb2e06953a9b97e58ba7373e1bea87fb95814ed1ed04a/c70f63b20ff149ea566eb2e06953a9b97e58ba7373e1bea87fb95814ed1ed04a-json.log",
+        "Name": "/supabase_vector_Plantery_Pyramid_Network",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "supabase_network_Plantery_Pyramid_Network",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": null,
+            "Name": ""
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "c70f63b20ff1",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "DOCKER_HOST=http://host.docker.internal:2375",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": null,
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://127.0.0.1:9001/health"
+                ],
+                "Interval": 10000000000,
+                "Timeout": 2000000000,
+                "Retries": 3
+            },
+            "Image": "public.ecr.aws/supabase/vector:0.28.1-alpine",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": [
+                "sh",
+                "-c",
+                "cat \u003c\u003c'EOF' \u003e /etc/vector/vector.yaml \u0026\u0026 vector --config /etc/vector/vector.yaml\napi:\n  enabled: true\n  address: 0.0.0.0:9001\n\nsources:\n  docker_host:\n    type: docker_logs\n    exclude_containers:\n      - \"supabase_vector_Plantery_Pyramid_Network\"\n\ntransforms:\n  project_logs:\n    type: remap\n    inputs:\n      - docker_host\n    source: |-\n      .project = \"default\"\n      .event_message = del(.message)\n      .appname = del(.container_name)\n      del(.container_created_at)\n      del(.container_id)\n      del(.source_type)\n      del(.stream)\n      del(.label)\n      del(.image)\n      del(.host)\n      del(.stream)\n  router:\n    type: route\n    inputs:\n      - project_logs\n    route:\n      kong: '.appname == \"supabase_kong_Plantery_Pyramid_Network\"'\n      auth: '.appname == \"supabase_auth_Plantery_Pyramid_Network\"'\n      rest: '.appname == \"supabase_rest_Plantery_Pyramid_Network\"'\n      realtime: '.appname == \"supabase_realtime_Plantery_Pyramid_Network\"'\n      storage: '.appname == \"supabase_storage_Plantery_Pyramid_Network\"'\n      functions: '.appname == \"supabase_edge_runtime_Plantery_Pyramid_Network\"'\n      db: '.appname == \"supabase_db_Plantery_Pyramid_Network\"'\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_logs:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      req, err = parse_nginx_log(.event_message, \"combined\")\n      if err == null {\n          .timestamp = req.timestamp\n          .metadata.request.headers.referer = req.referer\n          .metadata.request.headers.user_agent = req.agent\n          .metadata.request.headers.cf_connecting_ip = req.client\n          .metadata.request.method = req.method\n          .metadata.request.path = req.path\n          .metadata.request.protocol = req.protocol\n          .metadata.response.status_code = req.status\n      }\n      if err != null {\n        abort\n      }\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_err:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      .metadata.request.method = \"GET\"\n      .metadata.response.status_code = 200\n      parsed, err = parse_nginx_log(.event_message, \"error\")\n      if err == null {\n          .timestamp = parsed.timestamp\n          .severity = parsed.severity\n          .metadata.request.host = parsed.host\n          .metadata.request.headers.cf_connecting_ip = parsed.client\n          url, err = split(parsed.request, \" \")\n          if err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Gotrue logs are structured json strings which frontend parses directly. But we keep metadata for consistency.\n  auth_logs:\n    type: remap\n    inputs:\n      - router.auth\n    source: |-\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .metadata.timestamp = parsed.time\n          .metadata = merge!(.metadata, parsed)\n      }\n  # PostgREST logs are structured so we separate timestamp from message using regex\n  rest_logs:\n    type: remap\n    inputs:\n      - router.rest\n    source: |-\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e.*): (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .timestamp = to_timestamp!(parsed.time)\n          .metadata.host = .project\n      }\n  # Realtime logs are structured so we parse the severity level using regex (ignore time because it has no date)\n  realtime_logs:\n    type: remap\n    inputs:\n      - router.realtime\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.external_id = .metadata.project\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e\\d+:\\d+:\\d+\\.\\d+) \\[(?P\u003clevel\u003e\\w+)\\] (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n      }\n  # Function logs are unstructured messages on stderr\n  functions_logs:\n    type: remap\n    inputs:\n      - router.functions\n    source: |-\n      .metadata.project_ref = del(.project)\n  # Storage logs may contain json objects so we parse them for completeness\n  storage_logs:\n    type: remap\n    inputs:\n      - router.storage\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.tenantId = .metadata.project\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n          .metadata.timestamp = parsed.time\n          .metadata.context[0].host = parsed.hostname\n          .metadata.context[0].pid = parsed.pid\n      }\n  # Postgres logs some messages to stderr which we map to warning severity level\n  db_logs:\n    type: remap\n    inputs:\n      - router.db\n    source: |-\n      .metadata.host = \"db-default\"\n      .metadata.parsed.timestamp = .timestamp\n\n      parsed, err = parse_regex(.event_message, r'.*(?P\u003clevel\u003eINFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC?):.*', numeric_groups: true)\n\n      if err != null || parsed == null {\n        .metadata.parsed.error_severity = \"info\"\n      }\n      if parsed != null {\n       .metadata.parsed.error_severity = parsed.level\n      }\n      if .metadata.parsed.error_severity == \"info\" {\n          .metadata.parsed.error_severity = \"log\"\n      }\n      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)\n\nsinks:\n  logflare_auth:\n    type: \"http\"\n    inputs:\n      - auth_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=gotrue.logs.prod\"\n  logflare_realtime:\n    type: \"http\"\n    inputs:\n      - realtime_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=realtime.logs.prod\"\n  logflare_rest:\n    type: \"http\"\n    inputs:\n      - rest_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgREST.logs.prod\"\n  logflare_db:\n    type: \"http\"\n    inputs:\n      - db_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgres.logs\"\n  logflare_functions:\n    type: \"http\"\n    inputs:\n      - functions_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=deno-relay-logs\"\n  logflare_storage:\n    type: \"http\"\n    inputs:\n      - storage_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=storage.logs.prod.2\"\n  logflare_kong:\n    type: \"http\"\n    inputs:\n      - kong_logs\n      - kong_err\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=cloudflare.logs.prod\"\n\nEOF\n"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.project": "Plantery_Pyramid_Network",
+                "com.supabase.cli.project": "Plantery_Pyramid_Network"
+            },
+            "StopTimeout": 1
+        },
+        "NetworkSettings": {
+            "Bridge": "",
+            "SandboxID": "039ab762fab3c337fe56f1c6ab058bd90fb9ced3f01249e3d8dcfa69b7a9849c",
+            "SandboxKey": "/var/run/docker/netns/039ab762fab3",
+            "Ports": {},
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "SecondaryIPAddresses": null,
+            "SecondaryIPv6Addresses": null,
+            "EndpointID": "",
+            "Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "MacAddress": "",
+            "Networks": {
+                "supabase_network_Plantery_Pyramid_Network": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "vector"
+                    ],
+                    "MacAddress": "0a:65:46:8b:48:70",
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "338744a73045bccbf7c90a1fcff741a098205f151c614b2613c64faa41aafad5",
+                    "EndpointID": "ce7293c512422c7c75229c4f8031f4cda8558c94f0a96369f01ac6defff4be66",
+                    "Gateway": "192.168.0.1",
+                    "IPAddress": "192.168.0.4",
+                    "IPPrefixLen": 20,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "supabase_vector_Plantery_Pyramid_Network",
+                        "vector",
+                        "c70f63b20ff1"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:6d09a70bc65f8d6a71313aee54a90ed7eeb64bbc5ce83d9b4214f24090ab35a1",
+            "size": 1428,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]
+
+
+--- entrypoint ---
+["sh","-c","cat <<'EOF' > /etc/vector/vector.yaml && vector --config /etc/vector/vector.yaml\napi:\n  enabled: true\n  address: 0.0.0.0:9001\n\nsources:\n  docker_host:\n    type: docker_logs\n    exclude_containers:\n      - \"supabase_vector_Plantery_Pyramid_Network\"\n\ntransforms:\n  project_logs:\n    type: remap\n    inputs:\n      - docker_host\n    source: |-\n      .project = \"default\"\n      .event_message = del(.message)\n      .appname = del(.container_name)\n      del(.container_created_at)\n      del(.container_id)\n      del(.source_type)\n      del(.stream)\n      del(.label)\n      del(.image)\n      del(.host)\n      del(.stream)\n  router:\n    type: route\n    inputs:\n      - project_logs\n    route:\n      kong: '.appname == \"supabase_kong_Plantery_Pyramid_Network\"'\n      auth: '.appname == \"supabase_auth_Plantery_Pyramid_Network\"'\n      rest: '.appname == \"supabase_rest_Plantery_Pyramid_Network\"'\n      realtime: '.appname == \"supabase_realtime_Plantery_Pyramid_Network\"'\n      storage: '.appname == \"supabase_storage_Plantery_Pyramid_Network\"'\n      functions: '.appname == \"supabase_edge_runtime_Plantery_Pyramid_Network\"'\n      db: '.appname == \"supabase_db_Plantery_Pyramid_Network\"'\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_logs:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      req, err = parse_nginx_log(.event_message, \"combined\")\n      if err == null {\n          .timestamp = req.timestamp\n          .metadata.request.headers.referer = req.referer\n          .metadata.request.headers.user_agent = req.agent\n          .metadata.request.headers.cf_connecting_ip = req.client\n          .metadata.request.method = req.method\n          .metadata.request.path = req.path\n          .metadata.request.protocol = req.protocol\n          .metadata.response.status_code = req.status\n      }\n      if err != null {\n        abort\n      }\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_err:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      .metadata.request.method = \"GET\"\n      .metadata.response.status_code = 200\n      parsed, err = parse_nginx_log(.event_message, \"error\")\n      if err == null {\n          .timestamp = parsed.timestamp\n          .severity = parsed.severity\n          .metadata.request.host = parsed.host\n          .metadata.request.headers.cf_connecting_ip = parsed.client\n          url, err = split(parsed.request, \" \")\n          if err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Gotrue logs are structured json strings which frontend parses directly. But we keep metadata for consistency.\n  auth_logs:\n    type: remap\n    inputs:\n      - router.auth\n    source: |-\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .metadata.timestamp = parsed.time\n          .metadata = merge!(.metadata, parsed)\n      }\n  # PostgREST logs are structured so we separate timestamp from message using regex\n  rest_logs:\n    type: remap\n    inputs:\n      - router.rest\n    source: |-\n      parsed, err = parse_regex(.event_message, r'^(?P<time>.*): (?P<msg>.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .timestamp = to_timestamp!(parsed.time)\n          .metadata.host = .project\n      }\n  # Realtime logs are structured so we parse the severity level using regex (ignore time because it has no date)\n  realtime_logs:\n    type: remap\n    inputs:\n      - router.realtime\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.external_id = .metadata.project\n      parsed, err = parse_regex(.event_message, r'^(?P<time>\\d+:\\d+:\\d+\\.\\d+) \\[(?P<level>\\w+)\\] (?P<msg>.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n      }\n  # Function logs are unstructured messages on stderr\n  functions_logs:\n    type: remap\n    inputs:\n      - router.functions\n    source: |-\n      .metadata.project_ref = del(.project)\n  # Storage logs may contain json objects so we parse them for completeness\n  storage_logs:\n    type: remap\n    inputs:\n      - router.storage\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.tenantId = .metadata.project\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n          .metadata.timestamp = parsed.time\n          .metadata.context[0].host = parsed.hostname\n          .metadata.context[0].pid = parsed.pid\n      }\n  # Postgres logs some messages to stderr which we map to warning severity level\n  db_logs:\n    type: remap\n    inputs:\n      - router.db\n    source: |-\n      .metadata.host = \"db-default\"\n      .metadata.parsed.timestamp = .timestamp\n\n      parsed, err = parse_regex(.event_message, r'.*(?P<level>INFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC?):.*', numeric_groups: true)\n\n      if err != null || parsed == null {\n        .metadata.parsed.error_severity = \"info\"\n      }\n      if parsed != null {\n       .metadata.parsed.error_severity = parsed.level\n      }\n      if .metadata.parsed.error_severity == \"info\" {\n          .metadata.parsed.error_severity = \"log\"\n      }\n      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)\n\nsinks:\n  logflare_auth:\n    type: \"http\"\n    inputs:\n      - auth_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=gotrue.logs.prod\"\n  logflare_realtime:\n    type: \"http\"\n    inputs:\n      - realtime_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=realtime.logs.prod\"\n  logflare_rest:\n    type: \"http\"\n    inputs:\n      - rest_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgREST.logs.prod\"\n  logflare_db:\n    type: \"http\"\n    inputs:\n      - db_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgres.logs\"\n  logflare_functions:\n    type: \"http\"\n    inputs:\n      - functions_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=deno-relay-logs\"\n  logflare_storage:\n    type: \"http\"\n    inputs:\n      - storage_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=storage.logs.prod.2\"\n  logflare_kong:\n    type: \"http\"\n    inputs:\n      - kong_logs\n      - kong_err\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=cloudflare.logs.prod\"\n\nEOF\n"]
+
+--- cmd ---
+null
+
+--- env ---
+["DOCKER_HOST=http://host.docker.internal:2375","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+
+--- ps vector ---
+    1 sh -c cat <<'EOF' > /etc/vector/vector.yaml && vector --config /etc/vector/vector.yaml api:   enabled: true   address: 0.0.0.0:9001  sources:   docker_host:     type: docker_logs     exclude_containers:       - "supabase_vector_Plantery_Pyramid_Network"  transforms:   project_logs:     type: remap     inputs:       - docker_host     source: |-       .project = "default"       .event_message = del(.message)       .appname = del(.container_name)       del(.container_created_at)       del(.container_id)       del(.source_type)       del(.stream)       del(.label)       del(.image)       del(.host)       del(.stream)   router:     type: route     inputs:       - project_logs     route:       kong: '.appname == "supabase_kong_Plantery_Pyramid_Network"'       auth: '.appname == "supabase_auth_Plantery_Pyramid_Network"'       rest: '.appname == "supabase_rest_Plantery_Pyramid_Network"'       realtime: '.appname == "supabase_realtime_Plantery_Pyramid_Network"'       storage: '.appname == "supabase_storage_Plantery_Pyramid_Network"'       functions: '.appname == "supabase_edge_runtime_Plantery_Pyramid_Network"'       db: '.appname == "supabase_db_Plantery_Pyramid_Network"'   # Ignores non nginx errors since they are related with kong booting up   kong_logs:     type: remap     inputs:       - router.kong     source: |-       req, err = parse_nginx_log(.event_message, "combined")       if err == null {           .timestamp = req.timestamp           .metadata.request.headers.referer = req.referer           .metadata.request.headers.user_agent = req.agent           .metadata.request.headers.cf_connecting_ip = req.client           .metadata.request.method = req.method           .metadata.request.path = req.path           .metadata.request.protocol = req.protocol           .metadata.response.status_code = req.status       }       if err != null {         abort       }   # Ignores non nginx errors since they are related with kong booting up   kong_err:     type: remap     inputs:       - router.kong     source: |-       .
+    9 vector --config /etc/vector/vector.yaml
+
+
+[CANON] Detected configPath from process args: cat
+
+[CANON] configPath kind = NONE
+
+--- validate BEFORE ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_functions"
+------------------------------------------------
+                                       Validated
+
+
+Offenders: router._unmatched
+
+[CANON] Patched target = 
+
+--- validate AFTER ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_storage"
+------------------------------------------------
+                                       Validated
+
+
+--- health ---
+{"ok":true}

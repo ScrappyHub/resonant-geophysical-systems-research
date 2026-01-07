@@ -1,0 +1,37 @@
+﻿=== FIX V7 AUDIT 20260105_032925 ===
+Container: c70f63b20ff1
+Backup: M:\Plantery Pyramid Network\vector\canon\backups\vector.before_fixv7.20260105_032925.yaml
+
+--- validate BEFORE ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_realtime"
+------------------------------------------------
+                                       Validated
+
+
+--- validate AFTER ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_db"
+------------------------------------------------
+                                       Validated
+

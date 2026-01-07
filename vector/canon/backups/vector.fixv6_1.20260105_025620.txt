@@ -1,0 +1,54 @@
+﻿=== FIX V6.1 AUDIT 20260105_025620 ===
+Container: c70f63b20ff1
+
+--- ps vector (filtered) ---
+
+
+[CANON] vectorLine = 
+
+[WARN] No explicit config arg found on vector process; defaulting to /etc/vector
+
+[CANON] configPath kind = DIR
+
+--- validate BEFORE ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_db"
+------------------------------------------------
+                                       Validated
+
+
+Offenders: router._unmatched
+
+[CANON] Writing drop-in to DIR: /etc/vector/99-canon-no-consumer.yaml
+
+[CANON] Patched target = /etc/vector/99-canon-no-consumer.yaml
+
+--- validate AFTER ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_kong"
+------------------------------------------------
+                                       Validated
+
+
+--- health ---
+{"ok":true}

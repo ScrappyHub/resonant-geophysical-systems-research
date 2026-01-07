@@ -1,0 +1,44 @@
+﻿=== FIX V3 AUDIT 20260105_011917 ===
+Container: c70f63b20ff1
+
+--- validate BEFORE ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_rest"
+------------------------------------------------
+                                       Validated
+
+
+Offender transforms: router._unmatched
+
+--- validate AFTER ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_kong"
+------------------------------------------------
+                                       Validated
+
+
+--- health ---
+{"ok":true}
+
+--- sha256 ---
+1f450825f38c169e06c67e7e4b9543f30063d27affa0f318e20ef31da5328007

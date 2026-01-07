@@ -1,0 +1,105 @@
+﻿=== FIX V8.1 AUDIT 20260105_104555 ===
+Container: c70f63b20ff1
+Target: /etc/vector/vector.yaml
+Backup: M:\Plantery Pyramid Network\vector\canon\backups\vector.before_fixv8_1.20260105_104555.yaml
+
+--- validate BEFORE ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_functions"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_auth"
+------------------------------------------------
+                                       Validated
+
+
+--- validate AFTER ---
+Loaded with warnings ["/etc/vector/vector.yaml"]
+------------------------------------------------
+~ Transform "router._unmatched" has no consumers
+
+ΓêÜ Component configuration
+ΓêÜ Health check "logflare_kong"
+ΓêÜ Health check "logflare_storage"
+ΓêÜ Health check "logflare_db"
+ΓêÜ Health check "logflare_rest"
+ΓêÜ Health check "logflare_realtime"
+ΓêÜ Health check "logflare_auth"
+ΓêÜ Health check "logflare_functions"
+------------------------------------------------
+                                       Validated
+
+
+--- proof router ---
+    26	      del(.host)
+    27	      del(.stream)
+    28	  router:
+    29	    type: route
+    30	    inputs:
+    31	      - project_logs
+    32	    route:
+    33	      kong: '.appname == "supabase_kong_Plantery_Pyramid_Network"'
+    34	      auth: '.appname == "supabase_auth_Plantery_Pyramid_Network"'
+    35	      rest: '.appname == "supabase_rest_Plantery_Pyramid_Network"'
+    36	      realtime: '.appname == "supabase_realtime_Plantery_Pyramid_Network"'
+    37	      storage: '.appname == "supabase_storage_Plantery_Pyramid_Network"'
+    38	      functions: '.appname == "supabase_edge_runtime_Plantery_Pyramid_Network"'
+    39	      db: '.appname == "supabase_db_Plantery_Pyramid_Network"'
+    40	  # Ignores non nginx errors since they are related with kong booting up
+    41	  kong_logs:
+    42	    type: remap
+    43	    inputs:
+    44	      - router.kong
+    45	    source: |-
+    46	      req, err = parse_nginx_log(.event_message, "combined")
+    47	      if err == null {
+    48	          .timestamp = req.timestamp
+    49	          .metadata.request.headers.referer = req.referer
+    50	          .metadata.request.headers.user_agent = req.agent
+    51	          .metadata.request.headers.cf_connecting_ip = req.client
+    52	          .metadata.request.method = req.method
+    53	          .metadata.request.path = req.path
+    54	          .metadata.request.protocol = req.protocol
+    55	          .metadata.response.status_code = req.status
+
+
+--- proof sinks ---
+   160	      if .metadata.parsed.error_severity == "info" {
+   161	          .metadata.parsed.error_severity = "log"
+   162	      }
+   163	      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)
+   164	
+   165	sinks:
+   166	  logflare_auth:
+   167	    type: "http"
+   168	    inputs:
+   169	      - auth_logs
+   170	    encoding:
+   171	      codec: "json"
+   172	    method: "post"
+   173	    request:
+   174	      retry_max_duration_secs: 10
+   175	      headers:
+   176	        x-api-key: "api-key"
+   177	    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=gotrue.logs.prod"
+   178	  logflare_realtime:
+   179	    type: "http"
+   180	    inputs:
+   181	      - realtime_logs
+   182	    encoding:
+   183	      codec: "json"
+   184	    method: "post"
+   185	    request:
+   186	      retry_max_duration_secs: 10
+   187	      headers:
+   188	        x-api-key: "api-key"
+   189	    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=realtime.logs.prod"
+   190	  logflare_rest:
+

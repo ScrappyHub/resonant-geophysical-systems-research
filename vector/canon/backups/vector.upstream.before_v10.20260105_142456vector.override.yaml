@@ -1,0 +1,297 @@
+# vector.yaml — canonical (single sources block, normalized appname, stable transforms)
+
+api:
+  enabled: true
+  address: 0.0.0.0:9001
+
+sources:
+  docker_host:
+    type: docker_logs
+
+    # IMPORTANT:
+    # - exclude your own vector container to avoid recursion
+    # - exclude konnect docker desktop extension container that spams out-of-order logs
+    exclude_containers:
+      - "supabase_vector_Plantery_Pyramid_Network"
+      - "kong_konnect-docker-extension-desktop-extension-service"
+
+transforms:
+  project_logs:
+    type: remap
+    inputs:
+      - docker_host
+    source: |-
+      # Default project tag for downstream sinks
+      .project = "default"
+
+      # Preserve message content under a consistent key
+      .event_message = del(.message)
+
+      # Docker container_name may come with a leading "/"
+      # Normalize so route matching works reliably.
+      .appname = del(.container_name)
+      if is_string(.appname) {
+        .appname = replace(.appname, r'^/', "")
+      }
+
+      # Drop docker metadata you don't want shipped
+      del(.container_created_at)
+      del(.container_id)
+      del(.source_type)
+      del(.label)
+      del(.image)
+      del(.host)
+      del(.stream)
+
+  router:
+    type: route
+    inputs:
+      - project_logs
+    route:
+      kong:      '.appname == "supabase_kong_Plantery_Pyramid_Network"'
+      auth:      '.appname == "supabase_auth_Plantery_Pyramid_Network"'
+      rest:      '.appname == "supabase_rest_Plantery_Pyramid_Network"'
+      realtime:  '.appname == "supabase_realtime_Plantery_Pyramid_Network"'
+      storage:   '.appname == "supabase_storage_Plantery_Pyramid_Network"'
+      functions: '.appname == "supabase_edge_runtime_Plantery_Pyramid_Network"'
+      db:        '.appname == "supabase_db_Plantery_Pyramid_Network"'
+
+  # ----------------------------
+  # KONG (nginx) — access logs
+  # ----------------------------
+  kong_logs:
+    type: remap
+    inputs:
+      - router.kong
+    source: |-
+      req, err = parse_nginx_log(.event_message, "combined")
+
+      # Ignore non-access lines (kong boot / misc noise)
+      if err != null {
+        abort
+      }
+
+      .timestamp = req.timestamp
+
+      .metadata.request.headers.referer = req.referer
+      .metadata.request.headers.user_agent = req.agent
+      .metadata.request.headers.cf_connecting_ip = req.client
+      .metadata.request.method = req.method
+      .metadata.request.path = req.path
+      .metadata.request.protocol = req.protocol
+
+      .metadata.response.status_code = req.status
+
+  # ----------------------------
+  # KONG (nginx) — error logs
+  # ----------------------------
+  kong_err:
+    type: remap
+    inputs:
+      - router.kong
+    source: |-
+      parsed, err = parse_nginx_log(.event_message, "error")
+
+      # Ignore non-error lines
+      if err != null {
+        abort
+      }
+
+      .timestamp = parsed.timestamp
+      .severity = parsed.severity
+
+      .metadata.request.host = parsed.host
+      .metadata.request.headers.cf_connecting_ip = parsed.client
+
+      # Parse: "METHOD PATH PROTO"
+      url, split_err = split(parsed.request, " ")
+      if split_err == null && length(url) >= 3 {
+        .metadata.request.method = url[0]
+        .metadata.request.path = url[1]
+        .metadata.request.protocol = url[2]
+      } else {
+        # Provide safe defaults if request field is malformed
+        .metadata.request.method = "GET"
+        .metadata.request.path = "/"
+        .metadata.request.protocol = "HTTP/1.1"
+      }
+
+      # Provide a stable response status for UI expectations
+      .metadata.response.status_code = 200
+
+  # ----------------------------
+  # AUTH (GoTrue) — structured JSON
+  # ----------------------------
+  auth_logs:
+    type: remap
+    inputs:
+      - router.auth
+    source: |-
+      parsed, err = parse_json(.event_message)
+      if err == null {
+        .metadata.timestamp = parsed.time
+        .metadata = merge!(.metadata, parsed)
+      }
+
+  # ----------------------------
+  # REST (PostgREST) — "time: msg"
+  # ----------------------------
+  rest_logs:
+    type: remap
+    inputs:
+      - router.rest
+    source: |-
+      parsed, err = parse_regex(.event_message, r'^(?P<time>.*): (?P<msg>.*)$')
+      if err == null {
+        .event_message = parsed.msg
+        .timestamp = to_timestamp!(parsed.time)
+        .metadata.host = .project
+      }
+
+  # ----------------------------
+  # REALTIME — "HH:MM:SS.mmm [LEVEL] msg" (no date)
+  # ----------------------------
+  realtime_logs:
+    type: remap
+    inputs:
+      - router.realtime
+    source: |-
+      .metadata.project = del(.project)
+      .metadata.external_id = .metadata.project
+
+      parsed, err = parse_regex(.event_message, r'^(?P<time>\d+:\d+:\d+\.\d+) \[(?P<level>\w+)\] (?P<msg>.*)$')
+      if err == null {
+        .event_message = parsed.msg
+        .metadata.level = parsed.level
+      }
+
+  # ----------------------------
+  # FUNCTIONS — unstructured stderr
+  # ----------------------------
+  functions_logs:
+    type: remap
+    inputs:
+      - router.functions
+    source: |-
+      .metadata.project_ref = del(.project)
+
+  # ----------------------------
+  # STORAGE — sometimes JSON
+  # ----------------------------
+  storage_logs:
+    type: remap
+    inputs:
+      - router.storage
+    source: |-
+      .metadata.project = del(.project)
+      .metadata.tenantId = .metadata.project
+
+      parsed, err = parse_json(.event_message)
+      if err == null {
+        .event_message = parsed.msg
+        .metadata.level = parsed.level
+        .metadata.timestamp = parsed.time
+
+        .metadata.context[0].host = parsed.hostname
+        .metadata.context[0].pid = parsed.pid
+      }
+
+  # ----------------------------
+  # DB (Postgres) — map severity safely
+  # ----------------------------
+  db_logs:
+    type: remap
+    inputs:
+      - router.db
+    source: |-
+      .metadata.host = "db-default"
+      .metadata.parsed.timestamp = .timestamp
+
+      parsed, err = parse_regex(.event_message, r'.*(?P<level>INFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC?):.*', numeric_groups: true)
+
+      if err != null || parsed == null {
+        .metadata.parsed.error_severity = "LOG"
+      } else {
+        .metadata.parsed.error_severity = upcase!(parsed.level)
+        if .metadata.parsed.error_severity == "INFO" {
+          .metadata.parsed.error_severity = "LOG"
+        }
+      }
+
+sinks:
+  logflare_auth:
+    type: http
+    inputs: [auth_logs]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=gotrue.logs.prod"
+
+  logflare_realtime:
+    type: http
+    inputs: [realtime_logs]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=realtime.logs.prod"
+
+  logflare_rest:
+    type: http
+    inputs: [rest_logs]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgREST.logs.prod"
+
+  logflare_db:
+    type: http
+    inputs: [db_logs]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=postgres.logs"
+
+  logflare_functions:
+    type: http
+    inputs: [functions_logs]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=deno-relay-logs"
+
+  logflare_storage:
+    type: http
+    inputs: [storage_logs]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=storage.logs.prod.2"
+
+  logflare_kong:
+    type: http
+    inputs: [kong_logs, kong_err]
+    encoding: { codec: json }
+    method: post
+    request:
+      retry_max_duration_secs: 10
+      headers:
+        x-api-key: "api-key"
+    uri: "http://supabase_analytics_Plantery_Pyramid_Network:4000/api/logs?source_name=cloudflare.logs.prod"
