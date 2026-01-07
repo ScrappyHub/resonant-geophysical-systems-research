@@ -66,3 +66,9 @@ supabase-debug*.log
 # === ROOTED: local debug logs ===
 reset_debug.log
 supabase-debug.start.log
+# === ROOTED: local inspection dumps (never commit) ===
+rgsr.step_engine_run_2d.pgdef.sql
+
+# === ROOTED: local env (never commit) ===
+.env.demo
+.env.work_engine
