@@ -45,9 +45,10 @@ function Exec-Psql {
 
   $tFlag = if ($TuplesOnly) { "-t -A" } else { "" }
 
-  # Use /bin/sh -lc so env var expansion occurs inside container
-  # Use single quotes around SQL in the inner command via stdin piping instead of -c to avoid quoting hell.
+  # Important: PowerShell-safe execution. We pipe SQL via stdin to psql.
+  # Also: Use -h 127.0.0.1 so it uses TCP inside the container.
   $cmd = "PGPASSWORD='$DbPassword' psql -h 127.0.0.1 -U $DbUser -d $DbName -v ON_ERROR_STOP=1 -X -P pager=off $tFlag"
+
   $Sql | docker exec -i $Name /bin/sh -lc $cmd
 }
 
@@ -55,7 +56,7 @@ function Exec-Psql {
 $cn = Get-DbContainerName -Name $ContainerName
 Wait-DbHealthy -Name $cn
 
-# 1) Enforce lockdown (auth schema)
+# 1) Enforce lockdown
 $lockSql = @'
 revoke usage on schema auth from anon;
 revoke usage on schema auth from authenticated;
@@ -68,7 +69,7 @@ revoke all privileges on all functions in schema auth from anon, authenticated, 
 
 Exec-Psql -Name $cn -Sql $lockSql | Out-Null
 
-# 2) Verify (hard fail if not locked)
+# 2) Verify
 $checkSql = @'
 select
   has_schema_privilege('anon','auth','USAGE') as anon_usage,
@@ -77,8 +78,9 @@ select
 '@
 
 $check = Exec-Psql -Name $cn -Sql $checkSql
-# Parse by just checking for any ' t ' in the output rows (simple + robust)
-if ($check -match '^\s*t\s*\|\s*t' -or $check -match '\|\s*t\s*\|' -or $check -match '\|\s*t\s*$') {
+
+# If any usage is still true, dump ACL and fail
+if ($check -match '\bt\b') {
   Write-Host "AUTH LOCKDOWN FAILED ❌"
   Write-Host "---- schema usage ----"
   $check | Write-Host
@@ -92,7 +94,7 @@ select
 from pg_namespace n
 where n.nspname='auth';
 "@
-  docker exec -i $cn psql -U postgres -d $DbName -X -P pager=off <<< $aclSql
+  $aclSql | docker exec -i $cn psql -U postgres -d $DbName -X -P pager=off | Write-Host
 
   throw "AUTH LOCKDOWN FAILED (anon/authenticated/public still have USAGE on auth schema)"
 }
