@@ -20,24 +20,37 @@ declare
   v_replay_hash text;
   v_match boolean;
 begin
+  -- 0) sanity: require core.subjects + rgsr.engine_configs
+  perform 1 from information_schema.tables
+   where table_schema = 'core' and table_name = 'subjects';
+  if not found then
+    raise exception 'RGSR determinism test: FAIL - missing table core.subjects';
+  end if;
+
   -- 1) pick a config
-  select config_id into v_config
-  from rgsr.engine_configs
-  order by created_at desc nulls last
+  select ec.config_id into v_config
+  from rgsr.engine_configs ec
+  order by ec.created_at desc nulls last
   limit 1;
 
   if v_config is null then
     raise exception 'RGSR determinism test: FAIL - no rgsr.engine_configs found';
   end if;
 
-  -- 2) create/get local owner
+  -- 2) create/get local owner (but we MUST satisfy FK -> core.subjects(subject_id))
   v_user := rgsr._seed_owner_any_user();
   if v_user is null then
     raise exception 'RGSR determinism test: FAIL - rgsr._seed_owner_any_user() returned null';
   end if;
 
-  -- 3) create run
+  -- FK satisfier: core.subjects(subject_id) must exist
+  insert into core.subjects(subject_id)
+  values (v_user)
+  on conflict (subject_id) do nothing;
+
+  -- 3) create run (must satisfy owner_uid FK)
   v_run := gen_random_uuid();
+
   insert into rgsr.engine_runs(
     run_id, owner_uid, config_id, engine_kind, status,
     tick_hz, dt_sec, max_steps, state, stats,
@@ -63,19 +76,19 @@ begin
     raise exception 'RGSR determinism test: FAIL - seeded 0 nodes for run=%', v_run;
   end if;
 
-  -- 5) step engine to generate readings (must succeed)
+  -- 5) step engine (must succeed)
   v_step := rgsr.step_engine_run_2d(v_run, 10);
   if coalesce(v_step->>'ok','false') <> 'true' then
     raise exception 'RGSR determinism test: FAIL - step_engine_run_2d returned %', v_step;
   end if;
 
-  -- 6) snapshot nodes (optional but we want it exercised)
+  -- 6) snapshot nodes (exercise snapshot path)
   perform rgsr.snapshot_engine_run_nodes(v_run);
 
   -- 7) finalize (seal)
   perform rgsr.finalize_engine_run(v_run);
 
-  -- 8) replay (must write evidence + replay hash)
+  -- 8) replay (writes evidence + replay hash)
   v_replay := rgsr.run_engine_run_replay(
     v_run,
     jsonb_build_object('source','ci_determinism_test','ts',now())
@@ -85,11 +98,11 @@ begin
     raise exception 'RGSR determinism test: FAIL - run_engine_run_replay returned null for run=%', v_run;
   end if;
 
-  -- 9) assert determinism (for this run, not “any run in the DB”)
-  select seal_hash_sha256, replay_hash_sha256, hashes_match
+  -- 9) assert determinism (for this run only)
+  select er.seal_hash_sha256, er.replay_hash_sha256, er.hashes_match
     into v_seal, v_replay_hash, v_match
-  from rgsr.engine_runs
-  where run_id = v_run;
+  from rgsr.engine_runs er
+  where er.run_id = v_run;
 
   if v_seal is null or v_replay_hash is null then
     raise exception 'RGSR determinism test: FAIL - missing hashes for run=% (seal=% replay=%)', v_run, v_seal, v_replay_hash;
@@ -100,6 +113,6 @@ begin
       v_run, v_seal, v_replay_hash, v_match;
   end if;
 
-  raise notice 'RGSR determinism test: PASS run=% seal=% replay=%', v_run, v_seal, v_replay_hash;
+  raise notice 'RGSR determinism test: PASS run=% owner=% seal=% replay=%', v_run, v_user, v_seal, v_replay_hash;
 end
 $$;
