@@ -79,3 +79,7 @@ supabase.status.txt
 # local scratch (never commit)
 _local/
 
+
+# canonical handoff bundle (never commit)
+_handoff/
+
