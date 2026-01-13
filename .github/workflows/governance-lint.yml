@@ -1,17 +1,26 @@
-name: Governance Guard
+﻿name: governance-lint
 
 on:
+  push:
+    paths:
+      - "governance/**"
+      - "GOVERNANCE/**"
+      - "scripts/governance-lint.ps1"
+      - ".github/workflows/governance-lint.yml"
   pull_request:
-    branches: [ main ]
+    paths:
+      - "governance/**"
+      - "GOVERNANCE/**"
+      - "scripts/governance-lint.ps1"
+      - ".github/workflows/governance-lint.yml"
 
 jobs:
-  governance-check:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ensure governance files unchanged without review
+      - name: Run governance lint
+        shell: pwsh
         run: |
-          if git diff --name-only origin/main...HEAD | grep -E "governance/|_CONSTITUTION|_LAW|STOP_LAYER"; then
-            echo "Governance file change detected."
-          fi
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/governance-lint.ps1
